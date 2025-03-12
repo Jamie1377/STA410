@@ -1,0 +1,13 @@
+numpy
+pandas
+yfinance
+scikit-learn
+statsmodels
+xgboost
+lightgbm
+catboost
+matplotlib
+pandas-market-calendars
+pandas_market_calendars
+mplcursors
+scikit-optimize

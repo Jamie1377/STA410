@@ -1,0 +1,2 @@
+import stock_prediction
+print(stock_prediction.__version__)

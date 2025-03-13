@@ -14,14 +14,15 @@ from xgboost import XGBRegressor
 from sklearn.neighbors import KNeighborsRegressor
 import matplotlib.pyplot as plt
 import pandas_market_calendars as mcal
-
 from sklearn.model_selection import train_test_split
 from .models import ARIMAXGBoost
 from stock_prediction.utils import get_mae, get_next_valid_date
 
-stock_data = yf.download("AAPL", start="2024-02-20", end = date.today())
+# Sample Dataset
+stock_data = yf.download("AAPL", start="2024-02-20", end=date.today())
 stock_data.columns = stock_data.columns.droplevel(1)
 stock_data
+
 
 class StockPredictor:
     """Stock price prediction pipeline
@@ -32,66 +33,6 @@ class StockPredictor:
         end_date (str): End date for data
         interval (str): Data interval (1d, 1h, etc)
     """
-
-    # def __init__(self, symbol, start_date, end_date=None, interval="1d"):
-    #     self.symbol = symbol
-    #     self.start_date = start_date
-    #     self.end_date = end_date or pd.Timestamp.today().strftime("%Y-%m-%d")
-    #     self.interval = interval
-    #     self.data = None
-    #     self.model = None
-
-    # def load_data(self):
-    #     """Load and preprocess stock data"""
-    #     self.data = yf.download(
-    #         self.symbol,
-    #         start=self.start_date,
-    #         end=self.end_date,
-    #         interval=self.interval,
-    #     )
-    #     self._add_features()
-    #     return self
-
-    # def train_model(self, model_config=None):
-    #     """Train prediction model with optional config"""
-    #     model_config = model_config or {}
-    #     self.model = ARIMAXGBoost(**model_config)
-
-    #     X = self.data.drop(columns=["Close"])
-    #     y = self.data["Close"]
-
-    #     X_train, X_test, y_train, y_test = train_test_split(
-    #         X, y, test_size=0.2, shuffle=False
-    #     )
-
-    #     self.model.fit(X_train, y_train)
-    #     return self
-
-    # def predict(self, days=7):
-    #     """Generate future predictions"""
-    #     if not self.model:
-    #         raise ValueError("Model not trained - call train_model() first")
-
-    #     future_dates = pd.date_range(
-    #         start=self.data.index[-1], periods=days + 1, freq="B"
-    #     )[1:]
-
-    #     # Create future features (simplified example)
-    #     last_features = self.data.iloc[-1:].drop(columns=["Close"])
-    #     future_X = pd.concat([last_features] * days, ignore_index=True)
-    #     future_X.index = future_dates
-
-    #     return self.model.predict(future_X)
-
-    # def _add_features(self):
-    #     """Feature engineering pipeline"""
-    #     # Example features - implement your full feature engineering
-    #     self.data["MA_50"] = self.data["Close"].rolling(50).mean()
-    #     self.data["MA_200"] = self.data["Close"].rolling(200).mean()
-    #     self.data["Returns"] = self.data["Close"].pct_change()
-    #     self.data.dropna(inplace=True)
-    #     return self
-
 
     def __init__(self, symbol, start_date, end_date=None, interval="1d"):
         self.symbol = symbol
@@ -116,7 +57,6 @@ class StockPredictor:
         self.scalers = {}
         self.transformers = {}
         self.interval = interval
-        
 
         # self.one_step_forward_forecast = {}
 
@@ -141,29 +81,29 @@ class StockPredictor:
         # self.data['BB_High'] = bb.bollinger_hband()
         # self.data['BB_Low'] = bb.bollinger_lband()
 
-        
-        
         # Add rolling statistics
-        self.data['rolling_std'] = self.data['Close'].rolling(window=50).std()
-        self.data['rolling_min'] = self.data['Close'].rolling(window=50).min()
+        self.data["rolling_std"] = self.data["Close"].rolling(window=50).std()
+        self.data["rolling_min"] = self.data["Close"].rolling(window=50).min()
         # self.data['rolling_max'] = self.data['Close'].rolling(window=window).max()
-        self.data['rolling_median'] = self.data['Close'].rolling(window=50).median()
-        self.data['rolling_sum'] = self.data['Close'].rolling(window=50).sum()
-        self.data['rolling_var'] = self.data['Close'].rolling(window=50).var()
-        self.data['rolling_ema'] = self.data['Close'].ewm(span=50, adjust=False).mean()  # Exponential Moving Average
-        
+        self.data["rolling_median"] = self.data["Close"].rolling(window=50).median()
+        self.data["rolling_sum"] = self.data["Close"].rolling(window=50).sum()
+        self.data["rolling_var"] = self.data["Close"].rolling(window=50).var()
+        self.data["rolling_ema"] = (
+            self.data["Close"].ewm(span=50, adjust=False).mean()
+        )  # Exponential Moving Average
+
         # Add rolling quantiles (25th and 75th percentiles)
-        self.data['rolling_25p'] = self.data['Close'].rolling(window=50).quantile(0.25)
-        self.data['rolling_75p'] = self.data['Close'].rolling(window=50).quantile(0.75)
-        
+        self.data["rolling_25p"] = self.data["Close"].rolling(window=50).quantile(0.25)
+        self.data["rolling_75p"] = self.data["Close"].rolling(window=50).quantile(0.75)
+
         # Drop rows with NaN values (due to rolling window)
         self.data.dropna(inplace=True)
-        
+
         # Add MACD
         # macd = ta.trend.MACD(self.data['Close'])
         # self.data['MACD'] = macd.macd()
         # self.data['MACD_Signal'] = macd.macd_signal()
-    
+
         # Add ATR
         # self.data['ATR'] = ta.volatility.AverageTrueRange(
         # high=self.data['High'], low=self.data['Low'], close=self.data['Close']
@@ -172,9 +112,7 @@ class StockPredictor:
         stock_data.index.name = "Date"  # Ensure the index is named "Date"
 
         # Fetch S&P 500 Index (GSPC) and Treasury Yield ETF (IEF) from Yahoo Finance
-        sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date)[
-            "Close"
-        ]
+        sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date)["Close"]
         tnx = yf.download(
             "^TNX", start=self.start_date, end=self.end_date, interval=self.interval
         )["Close"]
@@ -193,40 +131,51 @@ class StockPredictor:
         vix = yf.download(
             "^VIX", start=self.start_date, end=self.end_date, interval=self.interval
         )["Close"]
-        # Combine into a DataFrame
-        # economic_data = (
-        #     pd.DataFrame(
-        #         {
-        #             "SP500": sp500,
-        #             "TNX": tnx,
-        #             "Treasury_Yield": treasury_yield,
-        #             "USDCAD=X": exchange_rate,
-        #             "Tech": technology_sector,
-        #             "Fin": financials_sector,
-        #             "VIX": vix,
-        #         }
-        #     )
-        #     .dropna() 
-        #     .reset_index()
-        #     .rename(columns={"Date": "Date"})
-        # )
 
-        economic_data = pd.concat(
-            [sp500, tnx, treasury_yield, exchange_rate, technology_sector, financials_sector, vix],
-            axis=1,
-            keys=["SP500", "TNX", "Treasury_Yield", "USDCAD=X", "Tech", "Fin", "VIX"]
-        ).reset_index().rename(columns={"index": "Date"}).dropna()
+        economic_data = (
+            pd.concat(
+                [
+                    sp500,
+                    tnx,
+                    treasury_yield,
+                    exchange_rate,
+                    technology_sector,
+                    financials_sector,
+                    vix,
+                ],
+                axis=1,
+                keys=[
+                    "SP500",
+                    "TNX",
+                    "Treasury_Yield",
+                    "USDCAD=X",
+                    "Tech",
+                    "Fin",
+                    "VIX",
+                ],
+            )
+            .reset_index()
+            .rename(columns={"index": "Date"})
+            .dropna()
+        )
         economic_data.columns = economic_data.columns.get_level_values(0)
 
         economic_data["Date"] = pd.to_datetime(economic_data["Date"])
         economic_data.set_index("Date", inplace=True)
 
         nyse = mcal.get_calendar("NYSE")
-        
+
         # Get the NYSE trading schedule
         schedule = nyse.schedule(start_date=self.start_date, end_date=self.end_date)
-        economic_data["is_next_non_trading_day"] = economic_data.index.shift(-1, freq='1d').isin(schedule.index).astype(int) + economic_data.index.shift(1, freq='1d').isin(schedule.index).astype(int)
-        
+        economic_data["is_next_non_trading_day"] = economic_data.index.shift(
+            -1, freq="1d"
+        ).isin(schedule.index).astype(int) + economic_data.index.shift(
+            1, freq="1d"
+        ).isin(
+            schedule.index
+        ).astype(
+            int
+        )
 
         self.data = pd.merge(self.data, economic_data, on="Date", how="left")
         self.data["Daily Returns"] = self.data["Close"].pct_change()
@@ -234,22 +183,7 @@ class StockPredictor:
 
         # self.data['Total Assets'] = balance_sheet['Total Assets']
         # self.data['Debt/Equity'] = balance_sheet["Total Liabilities Net Minority Interest"] / balance_sheet["Total Equity Gross Minority Interest"]
-
         self.data = self.data.dropna()
-
-        # Feature selection
-        features = [
-            "Close",
-            "MA_50",
-            "MA_200",
-            "Low",
-            # "Adj Close",
-            "Daily Returns",
-            "Volatility",
-            "TNX",
-            "Treasury_Yield",
-            "SP500",
-        ]
 
         # Process each feature set
         for name, config in self.feature_sets.items():
@@ -458,7 +392,6 @@ class StockPredictor:
 
         for feature_name, feature_set in self.feature_sets.items():
 
-          
             self.models[feature_name]["decision_tree_max_leaf_node"] = {}
             self.forecasts[feature_name]["decision_tree_max_leaf_node"] = {}
             self.metrics[feature_name]["decision_tree_max_leaf_node"] = {}
@@ -782,30 +715,30 @@ class StockPredictor:
             X_train_poly = poly.fit_transform(X_train_scaled)
             X_test_poly = poly.transform(X_test_scaled)
 
-
-
             if weight is True:
 
-                allowed_columns = list(self.data.iloc[:,8:].columns)
+                allowed_columns = list(self.data.iloc[:, 8:].columns)
                 rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
-                filtered_columns = [col for col in X_train.columns if col in allowed_columns]
+                filtered_columns = [
+                    col for col in X_train.columns if col in allowed_columns
+                ]
                 filtered_df = X_train.loc[:, filtered_columns]
                 # filtered_df = X_train
                 rf_model.fit(filtered_df, y_train)
-                importances = rf_model.feature_importances_*len(filtered_columns)
+                importances = rf_model.feature_importances_ * len(filtered_columns)
 
-                importance_df = pd.DataFrame({"Feature": filtered_df.columns, "Importance": importances}
-                    )
+                importance_df = pd.DataFrame(
+                    {"Feature": filtered_df.columns, "Importance": importances}
+                )
                 importance_df["Weight"] = (
-                importance_df["Importance"] / importance_df["Importance"].sum()
+                    importance_df["Importance"] / importance_df["Importance"].sum()
                 )
 
                 scaler_weight = StandardScaler()
-                X_train[filtered_columns] = scaler_weight.fit_transform(X_train[filtered_columns])
-                X_train[filtered_columns] *= importances  
-
-
-
+                X_train[filtered_columns] = scaler_weight.fit_transform(
+                    X_train[filtered_columns]
+                )
+                X_train[filtered_columns] *= importances
 
             # Perform random search
             # best_order, best_model = random_search_arima(y, p_range, d_range, q_range, n_iter=100, random_state=42)
@@ -858,7 +791,6 @@ class StockPredictor:
             self.models[predictor] = models
             self.scalers[predictor] = scaler
             self.transformers[predictor] = poly
-
 
     def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
         """
@@ -1157,11 +1089,11 @@ class StockPredictor:
                 print(f"RMSE: {metric:.2f}")
             print("-" * 50)
 
-
-
-    def full_workflow(start_date, end_date, predictors = None, companies = None, stock_settings = {}):
+    def full_workflow(
+        start_date, end_date, predictors=None, companies=None, stock_settings={}
+    ):
         """
-        This function is used to output the prediction of the stock price for the next 10 days
+        This function is used to output the prediction of the stock price for the future based on the stock price data from the start date to the end date.
 
         Args:
         start_date (str): The start date of the stock price data
@@ -1177,18 +1109,33 @@ class StockPredictor:
             prediction_dataset = StockPredictor(
                 company,
                 start_date=start_date,
-                end_date= end_date,
+                end_date=end_date,
                 interval="1d",
             )
             prediction_dataset.load_data()
             if predictors is None:
-                predictors =  ['Close', 'MA_50', 'MA_200',
-                            'SP500','TNX','USDCAD=X','Tech','Fin','VIX'] + ['rolling_min', 'rolling_median',
-            'rolling_sum', 'rolling_ema', 'rolling_25p','rolling_75p',] 
+                predictors = [
+                    "Close",
+                    "MA_50",
+                    "MA_200",
+                    "SP500",
+                    "TNX",
+                    "USDCAD=X",
+                    "Tech",
+                    "Fin",
+                    "VIX",
+                ] + [
+                    "rolling_min",
+                    "rolling_median",
+                    "rolling_sum",
+                    "rolling_ema",
+                    "rolling_25p",
+                    "rolling_75p",
+                ]
             predictors = predictors
-            
+
             predictor = prediction_dataset
-            if len(stock_settings) != 0  or company in stock_settings:
+            if len(stock_settings) != 0 or company in stock_settings:
                 # Use custom settings for the stock
                 settings = stock_settings[company]
                 horizons = settings["horizons"]
@@ -1197,11 +1144,15 @@ class StockPredictor:
                 # Use default settings for other stocks
                 horizons = default_horizons
                 weight = default_weight
-            for horizon in horizons: 
-                prediction_dataset.prepare_models(predictors, horizon=horizon, weight=weight)
+            for horizon in horizons:
+                prediction_dataset.prepare_models(
+                    predictors, horizon=horizon, weight=weight
+                )
                 # prediction_dataset._evaluate_models('Close')
-                prediction, backtest, predictions_dict = predictor.one_step_forward_forecast(
-                    predictors, model_type="arimaxgb", horizon=horizon
+                prediction, backtest, predictions_dict = (
+                    predictor.one_step_forward_forecast(
+                        predictors, model_type="arimaxgb", horizon=horizon
+                    )
                 )
 
                 # Data Viz (Not that key)
@@ -1210,8 +1161,12 @@ class StockPredictor:
                 first_day = pd.to_datetime(end_date - timedelta(days=10 + horizon))
 
                 plt.plot(
-                    prediction[prediction.index >= prediction_dataset.data.iloc[-1].name].index,
-                    prediction[prediction.index >= prediction_dataset.data.iloc[-1].name].Close,
+                    prediction[
+                        prediction.index >= prediction_dataset.data.iloc[-1].name
+                    ].index,
+                    prediction[
+                        prediction.index >= prediction_dataset.data.iloc[-1].name
+                    ].Close,
                     label="Prediction",
                     color="blue",
                 )
@@ -1225,7 +1180,9 @@ class StockPredictor:
                     prediction_dataset.data.Close[
                         prediction_dataset.data.index > first_day
                     ].index,
-                    prediction_dataset.data.Close[prediction_dataset.data.index > first_day],
+                    prediction_dataset.data.Close[
+                        prediction_dataset.data.index > first_day
+                    ],
                     label="Actual",
                     color="black",
                 )
@@ -1253,16 +1210,6 @@ class StockPredictor:
                 plt.show()
 
 
-
-
-
 # Example usage
 if __name__ == "__main__":
     predictor = StockPredictor("AAPL", start_date="2020-01-01")
-    # (predictor
-    # .load_data()
-    #  .train_sarima()
-    #  .train_ml_models()
-    #  .train_polynomial()
-    #  .plot_predictions()
-    #  .print_metrics())

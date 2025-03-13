@@ -14,6 +14,7 @@ from sklearn.metrics import mean_squared_error
 import numpy as np
 from statsmodels.tsa.holtwinters import ExponentialSmoothing, SimpleExpSmoothing
 
+
 class ARIMAXGBoost(BaseEstimator, RegressorMixin):
     """Hybrid SARIMAX + Boosting ensemble with configurable components
 
@@ -152,9 +153,6 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
     #         return y  # If no TS models, use full signal
 
     #     return y - np.mean(base_preds, axis=0)
-    
-
-
 
     def __init__(self, xgb_params=None):
         """
@@ -202,7 +200,9 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         # P = Q = 1
 
         self.arima_model = SARIMAX(
-            y.values, order=(0, 1, 4), seasonal_order=(2, 1, 2, 6)   ##P = 4,# Q = 4 D = 6, #p  =6 ,d =1,q =4
+            y.values,
+            order=(0, 1, 4),
+            seasonal_order=(2, 1, 2, 6),  ##P = 4,# Q = 4 D = 6, #p  =6 ,d =1,q =4
         )
         self.arima_model_fit = self.arima_model.fit(disp=False)
         arima_predictions = self.arima_model_fit.predict()
@@ -235,21 +235,27 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         # forecast_input = X.values[-self.var_model_fit.k_ar:]  # Get the last 'k_ar' rows for forecasting
         # var_predictions = self.var_model_fit.forecast(y=forecast_input, steps=len(y))
 
-
         # Base models (level-0)
         base_models = [
-        ("random_forest", RandomForestRegressor(n_estimators=100, random_state=42)),
-        ("gradient_boosting", GradientBoostingRegressor(n_estimators=100, random_state=42)),
-        ("svr", SVR(kernel="rbf", C=1.0, epsilon=0.1),
-        ("sdg", SGDRegressor(max_iter=1000, tol=1e-3)),)
+            ("random_forest", RandomForestRegressor(n_estimators=100, random_state=42)),
+            (
+                "gradient_boosting",
+                GradientBoostingRegressor(n_estimators=100, random_state=42),
+            ),
+            (
+                "svr",
+                SVR(kernel="rbf", C=1.0, epsilon=0.1),
+                ("sdg", SGDRegressor(max_iter=1000, tol=1e-3)),
+            ),
         ]
         # Meta-model (level-1)
         meta_model = self.lgbm_model
         # Stacking Regressor
-        self.stacking_regressor = StackingRegressor(estimators=base_models, final_estimator=meta_model, cv=5)
+        self.stacking_regressor = StackingRegressor(
+            estimators=base_models, final_estimator=meta_model, cv=5
+        )
         # Fit the stacking model
         self.stacking_regressor.fit(X, y)
-
 
         residuals = y - (1 / 3) * (
             arima_predictions
@@ -305,19 +311,15 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
 
         ses_predictions_1 = self.ses1.forecast(len(X))  # .rename(r"$\alpha=0.2$")
         ses_predictions_2 = self.ses2.forecast(len(X))  # .rename(r"$\alpha=0.6$")
-        ses_predictions_3 = self.ses3.forecast(
-            len(X)
-        )  
+        ses_predictions_3 = self.ses3.forecast(len(X))
         # varmax_predictions = self.varmax_model.forecast(steps=len(X))
         hwes_predictions = self.hwes_model.forecast(steps=len(X))
         stacking_predictions = self.stacking_regressor.predict(X)
-
 
         # Step 3: Get boosting model predictions for residuals
         # xgb_residuals = self.xgb_model.predict(X_lagged)
         # lgbm_residuals = self.lgbm_model.predict(X_lagged)
         # catboost_residuals = self.catboost_model.predict(X_lagged)
-
 
         # xgb_predictions = self.xgb_model.predict(X)
         # lasso_predictions = self.lasso_model.predict(X)

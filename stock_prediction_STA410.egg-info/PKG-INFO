@@ -14,5 +14,5 @@ Requires-Dist: matplotlib
 Requires-Dist: pandas-market-calendars
 Requires-Dist: pandas_market_calendars
 Requires-Dist: mplcursors
-Requires-Dist: scikit-optimize
+Requires-Dist: scikit-optimizehmmlearn
 Dynamic: requires-dist

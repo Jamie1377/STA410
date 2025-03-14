@@ -18,6 +18,7 @@ setup(
         "pandas_market_calendars",
         "mplcursors",
         "scikit-optimize"
+        "hmmlearn"
 
 
 

@@ -3,6 +3,7 @@ README.md
 setup.py
 stock_prediction/__init__.py
 stock_prediction/core/__init__.py
+stock_prediction/core/hmm_model.py
 stock_prediction/core/models.py
 stock_prediction/core/predictor.py
 stock_prediction/utils/__init__.py

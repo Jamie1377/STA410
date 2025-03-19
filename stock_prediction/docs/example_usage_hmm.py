@@ -13,4 +13,4 @@ strong_buy_companies = yf.Sector("technology").top_companies[
 strong_buy_list = list(strong_buy_companies.index)[0:2]
 
 
-full_process_hmm(big_fin_companies_list[:5], "2024-01-01", NUM_ITERS=250)
+full_process_hmm(big_fin_companies_list[-5:], "2024-01-01", NUM_ITERS=250)

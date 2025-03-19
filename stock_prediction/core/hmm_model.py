@@ -217,7 +217,16 @@ def full_process_hmm(STOCKS=["AVGO"], start="2020-01-01", NUM_ITERS=10000):
                 tol=0.0001,
                 n_iter=NUM_ITERS,
             )
+            
             model.fit(dataset.iloc[NUM_TEST:, :])
+            if not model.monitor_.converged:
+                print("Model did not converge, skipping...")
+            else:
+                print("Model converged successfully!")
+
+
+
+            
             model.startprob_ = fix_startprob(model.startprob_)
             model.transmat_ = fix_transmat(model.transmat_)
             # if model.monitor_.iter == NUM_ITERS:
@@ -277,6 +286,13 @@ def full_process_hmm(STOCKS=["AVGO"], start="2020-01-01", NUM_ITERS=10000):
             model.fit(np.flipud(train_dataset))
             model.transmat_ = fix_transmat(model.transmat_)
             model.startprob_ = fix_startprob(model.startprob_)
+
+            if not model.monitor_.converged:
+                print("Model did not converge, skipping...")
+                continue
+            else:
+                print("Model converged successfully!")
+
 
             # model.transmat_ = transmat_retune_prior
             # transmat_retune_prior = model.transmat_
@@ -561,6 +577,11 @@ def full_process_hmm(STOCKS=["AVGO"], start="2020-01-01", NUM_ITERS=10000):
             final_model.fit(np.flipud(dataset_actual))
             final_model.transmat_ = fix_transmat(final_model.transmat_)
             final_model.startprob_ = fix_startprob(final_model.startprob_)
+            if not model.monitor_.converged:
+                print("Model did not converge, skipping...")
+                continue
+            else:
+                print("Model converged successfully!")
 
             # Check convergence
             # if model.monitor_.iter == NUM_ITERS:

@@ -1,5 +1,6 @@
 from stock_prediction.core import StockPredictor
 from datetime import date
+
 stock_settings = {
     "V": {"horizons": [7], "weight": False},
     "GE": {"horizons": [5], "weight": False},
@@ -14,18 +15,15 @@ stock_settings = {
     "ORCL": {"horizons": [3, 7], "weight": False},
     "LCID": {"horizons": [7], "weight": False},
     "CRWD": {"horizons": [7, 12], "weight": False},
-    "KDP":  {"horizons": [3, 5, 12], "weight": False},
-    "SBUX": {"horizons": [ 4, 5, 7], "weight": False},
+    "KDP": {"horizons": [3, 5, 12], "weight": False},
+    "SBUX": {"horizons": [4, 5, 7], "weight": False},
     "ZS": {"horizons": [4, 5], "weight": False},
     "MET": {"horizons": [5], "weight": False},
     "EBAY": {"horizons": [10], "weight": False},
     "TMUS": {"horizons": [10], "weight": False},
     "ASML": {"horizons": [10], "weight": False},
-    "MTCH": {"horizons": [10], "weight": False},}
-
-
-
-
+    "MTCH": {"horizons": [10], "weight": False},
+}
 
 
 # def full_workflow(start_date, end_date, predictors = None, companies = None, ):
@@ -53,9 +51,9 @@ stock_settings = {
 #         if predictors is None:
 #             predictors =  ['Close', 'MA_50', 'MA_200',
 #                         'SP500','TNX','USDCAD=X','Tech','Fin','VIX'] + ['rolling_min', 'rolling_median',
-#         'rolling_sum', 'rolling_ema', 'rolling_25p','rolling_75p',] 
+#         'rolling_sum', 'rolling_ema', 'rolling_25p','rolling_75p',]
 #         predictors = predictors
-        
+
 #         predictor = prediction_dataset
 #         if company in stock_settings:
 #             # Use custom settings for the stock
@@ -66,7 +64,7 @@ stock_settings = {
 #             # Use default settings for other stocks
 #             horizons = default_horizons
 #             weight = default_weight
-#         for horizon in horizons: 
+#         for horizon in horizons:
 #             prediction_dataset.prepare_models(predictors, horizon=horizon, weight=weight)
 #             # prediction_dataset._evaluate_models('Close')
 #             prediction, backtest, predictions_dict = predictor.one_step_forward_forecast(
@@ -121,4 +119,4 @@ stock_settings = {
 #             plt.legend()
 #             plt.show()
 
-StockPredictor.full_workflow('2023-01-01',date.today())
+StockPredictor.full_workflow("2023-01-01", date.today(), companies=["SBUX"], stock_settings=stock_settings)

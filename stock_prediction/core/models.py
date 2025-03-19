@@ -223,12 +223,21 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         catboost_pred = self.catboost_model.predict(X_scaled)
 
         # Combine predictions
+        # predictions = (
+        #     0.4 * arima_pred +
+        #     0.10 * (hwes_forecast + ses2_forecast) +
+        #     0.20 * (gd_pred + sgd_pred) +
+        #     0.05 * lgbm_pred +
+        #     0.05 * catboost_pred 
+        # )
         predictions = (
-            0.5 * arima_pred +
-            0.05 * (hwes_forecast + hwes_forecast) +
-            0.20 * (gd_pred + sgd_pred) +
-            0.05 * lgbm_pred +
-            0.05 * catboost_pred 
+        0.10 * arima_pred +              # Reduce ARIMA dominance
+        0.05 * (hwes_forecast * 0.6 +    # Weight HWES more than SES2
+            ses2_forecast * 0.4) +
+        0.85 * (gd_pred * 0.8 +         # Favor GD over SGD
+            sgd_pred * 0.2) +
+        0.05 * lgbm_pred +               # Boost residual correction
+        0.05 * catboost_pred             # Balance categorical handling
         )
 
         # Final sanitization

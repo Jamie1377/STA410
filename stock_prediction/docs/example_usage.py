@@ -1,13 +1,14 @@
 from stock_prediction.core import StockPredictor
 from datetime import date
+import time
 
 stock_settings = {
-    "V": {"horizons": [7], "weight": False},
+    "V": {"horizons": [10], "weight": False},
     "GE": {"horizons": [5], "weight": False},
     "ANF": {"horizons": [7, 10], "weight": False},
     "AVGO": {"horizons": [7, 5, 10, 12], "weight": False},
     "AXP": {"horizons": [5], "weight": False},
-    "NVDA": {"horizons": [12], "weight": False},
+    "NVDA": {"horizons": [10], "weight": False},
     "MCO": {"horizons": [1], "weight": False},
     "PYPL": {"horizons": [5], "weight": False},
     "SPGI": {"horizons": [7], "weight": True},
@@ -119,4 +120,8 @@ stock_settings = {
 #             plt.legend()
 #             plt.show()
 
-StockPredictor.full_workflow("2023-01-01", date.today(), companies=["SBUX"], stock_settings=stock_settings)
+toc = time.time()
+StockPredictor.full_workflow("2023-02-01", date.today(), companies=["V"], stock_settings=stock_settings)
+tic = time.time()
+tic-toc
+print(tic-toc)

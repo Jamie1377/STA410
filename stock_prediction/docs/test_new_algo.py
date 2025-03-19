@@ -2,7 +2,7 @@ from stock_prediction.core import ARIMAXGBoost, StockPredictor
 from datetime import date
 from sklearn.model_selection import train_test_split
 
-wtf = StockPredictor('AXP', '2024-01-01')
+wtf = StockPredictor('AVGO', '2024-01-01')
 wtf.load_data()
 
 

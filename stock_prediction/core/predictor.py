@@ -4,7 +4,7 @@ import numpy as np
 from datetime import date, timedelta
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.statespace.sarimax import SARIMAX
-from sklearn.metrics import mean_squared_error, root_mean_squared_error
+from sklearn.metrics import mean_squared_error, root_mean_squared_error, mean_absolute_percentage_error
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
@@ -1140,11 +1140,19 @@ class StockPredictor:
                 )
                 # print(prediction)
                 # print(backtest)
+                first_day = pd.to_datetime(end_date - timedelta(days=5 + horizon))
+
+                backtest_mape = mean_absolute_percentage_error(prediction_dataset.data.Close[prediction_dataset.data.index >= first_day], backtest[backtest.index >= first_day].Close)
+                print('MSE of backtest period vs real data',backtest_mape)
+                print('Horizon: ',horizon)
+                print('-----------------------------------')
+                if backtest_mape > 0.20:
+                    continue
 
                 # Data Viz (Not that key)
                 plt.figure(figsize=(12, 6))
 
-                first_day = pd.to_datetime(end_date - timedelta(days=5 + horizon))
+                # first_day = pd.to_datetime(end_date - timedelta(days=5 + horizon))
 
                 plt.plot(
                     prediction[
@@ -1195,6 +1203,7 @@ class StockPredictor:
                 plt.legend()
                 plt.show()
 
+               
 
 # Example usage
 if __name__ == "__main__":

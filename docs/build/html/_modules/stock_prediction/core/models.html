@@ -1,0 +1,996 @@
+
+<!DOCTYPE html>
+
+
+<html lang="en" data-content_root="../../../" >
+
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>stock_prediction.core.models &#8212; STA410-Stock-Prediction  documentation</title>
+  
+  
+  
+  <script data-cfasync="false">
+    document.documentElement.dataset.mode = localStorage.getItem("mode") || "";
+    document.documentElement.dataset.theme = localStorage.getItem("theme") || "";
+  </script>
+  <!--
+    this give us a css class that will be invisible only if js is disabled
+  -->
+  <noscript>
+    <style>
+      .pst-js-only { display: none !important; }
+
+    </style>
+  </noscript>
+  
+  <!-- Loaded before other Sphinx assets -->
+  <link href="../../../_static/styles/theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+<link href="../../../_static/styles/pydata-sphinx-theme.css?digest=8878045cc6db502f8baf" rel="stylesheet" />
+
+    <link rel="stylesheet" type="text/css" href="../../../_static/pygments.css?v=8f2a1f02" />
+  
+  <!-- So that users can add custom icons -->
+  <script src="../../../_static/scripts/fontawesome.js?digest=8878045cc6db502f8baf"></script>
+  <!-- Pre-loaded scripts that we'll load fully later -->
+  <link rel="preload" as="script" href="../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf" />
+<link rel="preload" as="script" href="../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf" />
+
+    <script src="../../../_static/documentation_options.js?v=5929fcd5"></script>
+    <script src="../../../_static/doctools.js?v=9bcbadda"></script>
+    <script src="../../../_static/sphinx_highlight.js?v=dc90522c"></script>
+    <script>DOCUMENTATION_OPTIONS.pagename = '_modules/stock_prediction/core/models';</script>
+    <link rel="index" title="Index" href="../../../genindex.html" />
+    <link rel="search" title="Search" href="../../../search.html" />
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <meta name="docsearch:language" content="en"/>
+  <meta name="docsearch:version" content="" />
+  </head>
+  
+  
+  <body data-bs-spy="scroll" data-bs-target=".bd-toc-nav" data-offset="180" data-bs-root-margin="0px 0px -60%" data-default-mode="">
+
+  
+  
+  <div id="pst-skip-link" class="skip-link d-print-none"><a href="#main-content">Skip to main content</a></div>
+  
+  <div id="pst-scroll-pixel-helper"></div>
+  
+  <button type="button" class="btn rounded-pill" id="pst-back-to-top">
+    <i class="fa-solid fa-arrow-up"></i>Back to top</button>
+
+  
+  <dialog id="pst-search-dialog">
+    
+<form class="bd-search d-flex align-items-center"
+      action="../../../search.html"
+      method="get">
+  <i class="fa-solid fa-magnifying-glass"></i>
+  <input type="search"
+         class="form-control"
+         name="q"
+         placeholder="Search the docs ..."
+         aria-label="Search the docs ..."
+         autocomplete="off"
+         autocorrect="off"
+         autocapitalize="off"
+         spellcheck="false"/>
+  <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd>K</kbd></span>
+</form>
+  </dialog>
+
+  <div class="pst-async-banner-revealer d-none">
+  <aside id="bd-header-version-warning" class="d-none d-print-none" aria-label="Version warning"></aside>
+</div>
+
+  
+    <header class="bd-header navbar navbar-expand-lg bd-navbar d-print-none">
+<div class="bd-header__inner bd-page-width">
+  <button class="pst-navbar-icon sidebar-toggle primary-toggle" aria-label="Site navigation">
+    <span class="fa-solid fa-bars"></span>
+  </button>
+  
+  
+  <div class="col-lg-3 navbar-header-items__start">
+    
+      <div class="navbar-item">
+
+  
+    
+  
+
+<a class="navbar-brand logo" href="../../../index.html">
+  
+  
+  
+  
+  
+    
+    
+      
+    
+    
+    <img src="../../../_static/logo.png" class="logo__image only-light" alt="STA410-Stock-Prediction  documentation - Home"/>
+    <img src="../../../_static/logo-dark.png" class="logo__image only-dark pst-js-only" alt="STA410-Stock-Prediction  documentation - Home"/>
+  
+  
+</a></div>
+    
+  </div>
+  
+  <div class="col-lg-9 navbar-header-items">
+    
+    <div class="me-auto navbar-header-items__center">
+      
+        <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+  </ul>
+</nav></div>
+      
+    </div>
+    
+    
+    <div class="navbar-header-items__end">
+      
+        <div class="navbar-item navbar-persistent--container">
+          
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+        </div>
+      
+      
+        <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+      
+        <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="hhttps://github.com/Jamie1377/STA410" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+      
+    </div>
+    
+  </div>
+  
+  
+    <div class="navbar-persistent--mobile">
+
+<button class="btn search-button-field search-button__button pst-js-only" title="Search" aria-label="Search" data-bs-placement="bottom" data-bs-toggle="tooltip">
+ <i class="fa-solid fa-magnifying-glass"></i>
+ <span class="search-button__default-text">Search</span>
+ <span class="search-button__kbd-shortcut"><kbd class="kbd-shortcut__modifier">Ctrl</kbd>+<kbd class="kbd-shortcut__modifier">K</kbd></span>
+</button>
+    </div>
+  
+
+  
+</div>
+
+    </header>
+  
+
+  <div class="bd-container">
+    <div class="bd-container__inner bd-page-width">
+      
+      
+      
+        
+      
+      <dialog id="pst-primary-sidebar-modal"></dialog>
+      <div id="pst-primary-sidebar" class="bd-sidebar-primary bd-sidebar hide-on-wide">
+        
+
+  
+  <div class="sidebar-header-items sidebar-primary__section">
+    
+    
+      <div class="sidebar-header-items__center">
+        
+          
+          
+            <div class="navbar-item">
+<nav>
+  <ul class="bd-navbar-elements navbar-nav">
+    
+  </ul>
+</nav></div>
+          
+        
+      </div>
+    
+    
+    
+      <div class="sidebar-header-items__end">
+        
+          <div class="navbar-item">
+
+<button class="btn btn-sm nav-link pst-navbar-icon theme-switch-button pst-js-only" aria-label="Color mode" data-bs-title="Color mode"  data-bs-placement="bottom" data-bs-toggle="tooltip">
+  <i class="theme-switch fa-solid fa-sun                fa-lg" data-mode="light" title="Light"></i>
+  <i class="theme-switch fa-solid fa-moon               fa-lg" data-mode="dark"  title="Dark"></i>
+  <i class="theme-switch fa-solid fa-circle-half-stroke fa-lg" data-mode="auto"  title="System Settings"></i>
+</button></div>
+        
+          <div class="navbar-item"><ul class="navbar-icon-links"
+    aria-label="Icon Links">
+        <li class="nav-item">
+          
+          
+          
+          
+          
+          
+          
+          
+          <a href="hhttps://github.com/Jamie1377/STA410" title="GitHub" class="nav-link pst-navbar-icon" rel="noopener" target="_blank" data-bs-toggle="tooltip" data-bs-placement="bottom"><i class="fa-brands fa-square-github fa-lg" aria-hidden="true"></i>
+            <span class="sr-only">GitHub</span></a>
+        </li>
+</ul></div>
+        
+      </div>
+    
+  </div>
+  
+  
+  <div class="sidebar-primary-items__end sidebar-primary__section">
+      <div class="sidebar-primary-item">
+<div id="ethical-ad-placement"
+      class="flat"
+      data-ea-publisher="readthedocs"
+      data-ea-type="readthedocs-sidebar"
+      data-ea-manual="true">
+</div></div>
+  </div>
+
+
+      </div>
+      
+      <main id="main-content" class="bd-main" role="main">
+        
+        
+          <div class="bd-content">
+            <div class="bd-article-container">
+              
+              <div class="bd-header-article d-print-none">
+<div class="header-article-items header-article__inner">
+  
+    <div class="header-article-items__start">
+      
+        <div class="header-article-item">
+
+<nav aria-label="Breadcrumb" class="d-print-none">
+  <ul class="bd-breadcrumbs">
+    
+    <li class="breadcrumb-item breadcrumb-home">
+      <a href="../../../index.html" class="nav-link" aria-label="Home">
+        <i class="fa-solid fa-home"></i>
+      </a>
+    </li>
+    
+    <li class="breadcrumb-item"><a href="../../index.html" class="nav-link">Module code</a></li>
+    
+    <li class="breadcrumb-item active" aria-current="page"><span class="ellipsis">stock_prediction.core.models</span></li>
+  </ul>
+</nav>
+</div>
+      
+    </div>
+  
+  
+</div>
+</div>
+              
+              
+              
+                
+<div id="searchbox"></div>
+                <article class="bd-article">
+                  
+  <h1>Source code for stock_prediction.core.models</h1><div class="highlight"><pre>
+<span></span><span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">RegressorMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">statsmodels.tsa.statespace.sarimax</span><span class="w"> </span><span class="kn">import</span> <span class="n">SARIMAX</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.svm</span><span class="w"> </span><span class="kn">import</span> <span class="n">SVR</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.linear_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">Lasso</span><span class="p">,</span> <span class="n">SGDRegressor</span><span class="p">,</span> <span class="n">LinearRegression</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.ensemble</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">StackingRegressor</span><span class="p">,</span>
+    <span class="n">RandomForestRegressor</span><span class="p">,</span>
+    <span class="n">GradientBoostingRegressor</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xgboost</span><span class="w"> </span><span class="kn">import</span> <span class="n">XGBRegressor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">lightgbm</span><span class="w"> </span><span class="kn">import</span> <span class="n">LGBMRegressor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">catboost</span><span class="w"> </span><span class="kn">import</span> <span class="n">CatBoostRegressor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">mean_squared_error</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">statsmodels.tsa.holtwinters</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExponentialSmoothing</span><span class="p">,</span> <span class="n">SimpleExpSmoothing</span>
+
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.base</span><span class="w"> </span><span class="kn">import</span> <span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">RegressorMixin</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">statsmodels.tsa.statespace.sarimax</span><span class="w"> </span><span class="kn">import</span> <span class="n">SARIMAX</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.svm</span><span class="w"> </span><span class="kn">import</span> <span class="n">SVR</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.linear_model</span><span class="w"> </span><span class="kn">import</span> <span class="n">Lasso</span><span class="p">,</span> <span class="n">LinearRegression</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.ensemble</span><span class="w"> </span><span class="kn">import</span> <span class="p">(</span>
+    <span class="n">StackingRegressor</span><span class="p">,</span>
+    <span class="n">RandomForestRegressor</span><span class="p">,</span>
+    <span class="n">GradientBoostingRegressor</span><span class="p">,</span>
+<span class="p">)</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">xgboost</span><span class="w"> </span><span class="kn">import</span> <span class="n">XGBRegressor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">lightgbm</span><span class="w"> </span><span class="kn">import</span> <span class="n">LGBMRegressor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">catboost</span><span class="w"> </span><span class="kn">import</span> <span class="n">CatBoostRegressor</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.metrics</span><span class="w"> </span><span class="kn">import</span> <span class="n">mean_squared_error</span>
+<span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">statsmodels.tsa.holtwinters</span><span class="w"> </span><span class="kn">import</span> <span class="n">ExponentialSmoothing</span><span class="p">,</span> <span class="n">SimpleExpSmoothing</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">sklearn.preprocessing</span><span class="w"> </span><span class="kn">import</span> <span class="n">StandardScaler</span>
+
+<span class="c1"># Custom Gradient Descent Implementations #######################################</span>
+<div class="viewcode-block" id="GradientDescentRegressor">
+<a class="viewcode-back" href="../../../stock_prediction.core.html#stock_prediction.GradientDescentRegressor">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">GradientDescentRegressor</span><span class="p">(</span><span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">RegressorMixin</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Custom GD implementation with momentum and adaptive learning</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        n_iter (int): Number of iterations</span>
+<span class="sd">        lr (float): Learning rate</span>
+<span class="sd">        alpha (float): L2 regularization</span>
+<span class="sd">        l1_ratio (float): L1 regularization</span>
+<span class="sd">        momentum (float): Momentum term</span>
+<span class="sd">        batch_size (int): Mini-batch size</span>
+<span class="sd">        rmsprop (bool): Use RMSProp optimizer</span>
+<span class="sd">        </span>
+<span class="sd">    Attributes:</span>
+<span class="sd">        coef_ (ndarray): Coefficients</span>
+<span class="sd">        intercept_ (float): Intercept</span>
+<span class="sd">        loss_history (list): Loss history</span>
+<span class="sd">        velocity (ndarray): Velocity</span>
+<span class="sd">        sq_grad_avg (ndarray): Squared gradient average</span>
+<span class="sd">        gradients_gd (ndarray): Gradients for GD</span>
+<span class="sd">        gradients_sgd (ndarray): Gradients for SGD</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">n_iter</span><span class="o">=</span><span class="mi">1000</span><span class="p">,</span> <span class="n">lr</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.0001</span><span class="p">,</span> <span class="n">l1_ratio</span><span class="o">=</span><span class="mf">0.0001</span><span class="p">,</span> <span class="n">momentum</span><span class="o">=</span><span class="mf">0.9</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="kc">None</span><span class="p">,</span> <span class="n">rmsprop</span><span class="o">=</span><span class="kc">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span> <span class="o">=</span> <span class="n">n_iter</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lr</span> <span class="o">=</span> <span class="n">lr</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">=</span> <span class="n">alpha</span>  <span class="c1"># L2 regularization</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">l1_ratio</span> <span class="o">=</span> <span class="n">l1_ratio</span> <span class="c1"># L1 regularization</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="o">=</span> <span class="n">momentum</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">=</span> <span class="n">batch_size</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">intercept_</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rmsprop</span> <span class="o">=</span> <span class="n">rmsprop</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">loss_history</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sq_grad_avg</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gradients_gd</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gradients_sgd</span> <span class="o">=</span> <span class="kc">None</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_add_bias</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Add bias term to input features&quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">c_</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]),</span> <span class="n">X</span><span class="p">]</span>
+
+<div class="viewcode-block" id="GradientDescentRegressor.fit">
+<a class="viewcode-back" href="../../../stock_prediction.core.html#stock_prediction.GradientDescentRegressor.fit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fit the model using GD or SGD</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters:</span>
+<span class="sd">            X (ndarray): Features</span>
+<span class="sd">            y (ndarray): Target</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="ow">and</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">&lt;</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fit_sgd</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_fit_gd</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+        <span class="k">return</span> <span class="bp">self</span></div>
+
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_fit_gd</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fit the model using GD</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters:</span>
+<span class="sd">            X (ndarray): Features</span>
+<span class="sd">            y (ndarray): Target</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">X_b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_bias</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_features</span> <span class="o">=</span> <span class="n">X_b</span><span class="o">.</span><span class="n">shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_features</span><span class="p">)</span>
+        <span class="n">velocity</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">)</span>
+        <span class="n">sq_grad_avg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">)</span>
+
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gradients_gd</span> <span class="o">=</span> <span class="mi">2</span><span class="o">/</span><span class="n">n_samples</span> <span class="o">*</span> <span class="n">X_b</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="p">(</span><span class="n">X_b</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">-</span> <span class="n">y</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gradients_gd</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span>  <span class="c1"># L2 regularization</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gradients_gd</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">l1_ratio</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">)</span>  <span class="c1"># L1 regularization</span>
+            
+
+            <span class="c1"># Update with momentum</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rmsprop</span><span class="p">:</span>
+                <span class="n">sq_grad_avg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="o">*</span> <span class="n">sq_grad_avg</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradients_gd</span><span class="o">**</span><span class="mi">2</span>
+                <span class="n">adj_grad</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradients_gd</span> <span class="o">/</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">sq_grad_avg</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
+                <span class="c1"># self.velocity = self.momentum * self.velocity + self.lr * adj_grad</span>
+                <span class="n">velocity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span><span class="p">)</span> <span class="o">*</span> <span class="n">adj_grad</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">velocity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="o">*</span> <span class="n">velocity</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lr</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradients_gd</span>
+                
+                
+
+            <span class="c1"># Update with momentum</span>
+            <span class="c1"># velocity = self.momentum * velocity + (1 - self.momentum) * self.gradients_gd</span>
+            <span class="c1"># self.coef_ -= self.lr * velocity</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">-=</span> <span class="n">velocity</span>
+            
+            <span class="c1"># Store loss</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">X_b</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">-</span> <span class="n">y</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.5</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">loss_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">loss</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">intercept_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">_fit_sgd</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Fit the model using SGD&quot;&quot;&quot;</span>
+        <span class="n">X_b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_bias</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="n">n_samples</span><span class="p">,</span> <span class="n">n_features</span> <span class="o">=</span> <span class="n">X_b</span><span class="o">.</span><span class="n">shape</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">n_features</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sq_grad_avg</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros_like</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">_</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">n_iter</span><span class="p">):</span>
+            <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">random</span><span class="o">.</span><span class="n">choice</span><span class="p">(</span><span class="n">n_samples</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span><span class="p">,</span> <span class="n">replace</span><span class="o">=</span><span class="kc">False</span><span class="p">)</span>
+            <span class="n">X_batch</span> <span class="o">=</span> <span class="n">X_b</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span>
+            <span class="n">y_batch</span> <span class="o">=</span> <span class="n">y</span><span class="p">[</span><span class="n">indices</span><span class="p">]</span>
+
+            <span class="bp">self</span><span class="o">.</span><span class="n">gradients_sgd</span> <span class="o">=</span> <span class="mi">2</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">batch_size</span> <span class="o">*</span> <span class="n">X_batch</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="p">(</span><span class="n">X_batch</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">-</span> <span class="n">y_batch</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gradients_sgd</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">gradients_sgd</span> <span class="o">+=</span> <span class="bp">self</span><span class="o">.</span><span class="n">l1_ratio</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sign</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">)</span>
+            
+            <span class="c1"># Update with momentum</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">rmsprop</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">sq_grad_avg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">sq_grad_avg</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span><span class="p">)</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradients_sgd</span><span class="o">**</span><span class="mi">2</span>
+                <span class="n">adj_grad</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradients_sgd</span> <span class="o">/</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sq_grad_avg</span><span class="p">)</span> <span class="o">+</span> <span class="mf">1e-8</span><span class="p">)</span>
+                <span class="c1"># self.velocity = self.momentum * self.velocity + self.lr * adj_grad</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">+</span> <span class="p">(</span><span class="mi">1</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span><span class="p">)</span> <span class="o">*</span> <span class="n">adj_grad</span>
+
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">momentum</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">lr</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">gradients_sgd</span>
+                
+                
+
+            <span class="c1"># velocity = self.momentum * velocity + (1 - self.momentum) * gradients</span>
+            <span class="c1"># self.coef_ -= self.lr * velocity</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span>
+            
+            <span class="c1"># Store loss</span>
+            <span class="n">loss</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mean</span><span class="p">((</span><span class="n">X_batch</span> <span class="o">@</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">-</span> <span class="n">y_batch</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="mf">0.5</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">alpha</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="o">**</span><span class="mi">2</span><span class="p">)</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">l1_ratio</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">loss_history</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">loss</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">intercept_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">[</span><span class="mi">1</span><span class="p">:]</span>
+
+<div class="viewcode-block" id="GradientDescentRegressor.predict">
+<a class="viewcode-back" href="../../../stock_prediction.core.html#stock_prediction.GradientDescentRegressor.predict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Make predictions</span>
+
+<span class="sd">        Parameters:</span>
+<span class="sd">            X (ndarray): Features</span>
+
+<span class="sd">        Returns:</span>
+<span class="sd">            ndarray: Predictions</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">X_b</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_add_bias</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">X_b</span> <span class="o">@</span> <span class="n">np</span><span class="o">.</span><span class="n">r_</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">intercept_</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span><span class="p">]</span></div>
+
+    
+<div class="viewcode-block" id="GradientDescentRegressor.newton_step">
+<a class="viewcode-back" href="../../../stock_prediction.core.html#stock_prediction.GradientDescentRegressor.newton_step">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">newton_step</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X_b</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Perform a Newton step</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters:</span>
+<span class="sd">            X_b (ndarray): Features</span>
+<span class="sd">            y (ndarray): Target</span>
+<span class="sd">        </span>
+<span class="sd">        Returns:</span>
+<span class="sd">            ndarray: Updated coefficients</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Compute Hessian (O(n³) - use carefully!)</span>
+        <span class="n">hessian</span> <span class="o">=</span> <span class="mi">2</span><span class="o">/</span><span class="n">X_b</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="n">X_b</span><span class="o">.</span><span class="n">T</span> <span class="o">@</span> <span class="n">X_b</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">alpha</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">eye</span><span class="p">(</span><span class="n">X_b</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">hessian_inv</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="n">hessian</span><span class="p">)</span>
+        <span class="n">grad</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_compute_gradients</span><span class="p">(</span><span class="n">X_b</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coef_</span> <span class="o">-=</span> <span class="n">hessian_inv</span> <span class="o">@</span> <span class="n">grad</span></div>
+</div>
+
+
+<span class="c1"># Modified ARIMAXGBoost Class ##################################################</span>
+<div class="viewcode-block" id="ARIMAXGBoost">
+<a class="viewcode-back" href="../../../stock_prediction.core.html#stock_prediction.ARIMAXGBoost">[docs]</a>
+<span class="k">class</span><span class="w"> </span><span class="nc">ARIMAXGBoost</span><span class="p">(</span><span class="n">BaseEstimator</span><span class="p">,</span> <span class="n">RegressorMixin</span><span class="p">):</span>
+<span class="w">    </span><span class="sd">&quot;&quot;&quot;Hybrid SARIMAX + Boosting ensemble with custom GD/SGD</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters:</span>
+<span class="sd">        xgb_params (dict): XGBoost parameters</span>
+<span class="sd">        </span>
+<span class="sd">    Attributes:</span>
+<span class="sd">        arima_model (SARIMAX): ARIMA model</span>
+<span class="sd">        arima_model_fit (SARIMAXResults): Fitted ARIMA model</span>
+<span class="sd">        hwes_model (ExponentialSmoothing): Holt-Winters model</span>
+<span class="sd">        ses2 (SimpleExpSmoothing): Simple Exponential Smoothing model</span>
+<span class="sd">        gd_model (GradientDescentRegressor): Custom GD model</span>
+<span class="sd">        sgd_model (GradientDescentRegressor): Custom SGD model</span>
+<span class="sd">        lgbm_model (LGBMRegressor): LightGBM model</span>
+<span class="sd">        catboost_model (CatBoostRegressor): CatBoost model</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">xgb_params</span><span class="o">=</span><span class="kc">None</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;Initialize the ARIMA + XGBoost model&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">arima_model</span> <span class="o">=</span> <span class="kc">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">linear_model</span> <span class="o">=</span> <span class="n">LinearRegression</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xgb_model</span> <span class="o">=</span> <span class="n">XGBRegressor</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gd_model</span> <span class="o">=</span> <span class="n">GradientDescentRegressor</span><span class="p">(</span><span class="n">n_iter</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span> <span class="n">lr</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">alpha</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">l1_ratio</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">momentum</span><span class="o">=</span><span class="mf">0.75</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sgd_model</span> <span class="o">=</span> <span class="n">GradientDescentRegressor</span><span class="p">(</span><span class="n">n_iter</span><span class="o">=</span><span class="mi">2000</span><span class="p">,</span> <span class="n">lr</span><span class="o">=</span><span class="mf">0.01</span><span class="p">,</span> <span class="n">batch_size</span><span class="o">=</span><span class="mi">32</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lgbm_model</span> <span class="o">=</span> <span class="n">LGBMRegressor</span><span class="p">(</span><span class="n">n_jobs</span><span class="o">=-</span><span class="mi">1</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=-</span><span class="mi">1</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">catboost_model</span> <span class="o">=</span> <span class="n">CatBoostRegressor</span><span class="p">(</span>
+            <span class="n">iterations</span><span class="o">=</span><span class="mi">500</span><span class="p">,</span> <span class="n">learning_rate</span><span class="o">=</span><span class="mf">0.1</span><span class="p">,</span> <span class="n">depth</span><span class="o">=</span><span class="mi">6</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="mi">0</span>
+        <span class="p">)</span>
+
+    <span class="c1"># def fit(self, X, y):</span>
+    <span class="c1">#     # ARIMA component</span>
+    <span class="c1">#     self.arima_model = SARIMAX(</span>
+    <span class="c1">#         y.values, order=(0, 1, 4), seasonal_order=(2, 1, 2, 6))</span>
+    <span class="c1">#     self.arima_model_fit = self.arima_model.fit(disp=False)</span>
+    <span class="c1">#     arima_predictions = self.arima_model_fit.predict()</span>
+
+    <span class="c1">#     # Exponential smoothing components</span>
+    <span class="c1">#     self.hwes_model = ExponentialSmoothing(y.values).fit()</span>
+    <span class="c1">#     self.ses2 = SimpleExpSmoothing(y.values, initialization_method=&quot;heuristic&quot;).fit(</span>
+    <span class="c1">#         smoothing_level=0.6, optimized=False</span>
+    <span class="c1">#     )</span>
+
+    <span class="c1">#     # Custom GD/SGD components</span>
+    <span class="c1">#     self.gd_model.fit(X, y.values)</span>
+    <span class="c1">#     self.sgd_model.fit(X, y.values)</span>
+
+    <span class="c1">#     # Residual calculation</span>
+    <span class="c1">#     residuals = y - 0.5 * (</span>
+    <span class="c1">#         arima_predictions </span>
+    <span class="c1">#         + self.hwes_model.fittedvalues</span>
+    <span class="c1">#         + self.gd_model.predict(X)</span>
+    <span class="c1">#     )</span>
+
+    <span class="c1">#     # Boosting on residuals</span>
+    <span class="c1">#     self.lgbm_model.fit(X, residuals)</span>
+    <span class="c1">#     # self.catboost_model.fit(X, residuals)</span>
+<div class="viewcode-block" id="ARIMAXGBoost.fit">
+<a class="viewcode-back" href="../../../stock_prediction.core.html#stock_prediction.ARIMAXGBoost.fit">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">fit</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">,</span> <span class="n">y</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Fit the ARIMA and XGBoost models.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters:</span>
+<span class="sd">        - X: Features (can include lagged values, external features, etc.).</span>
+<span class="sd">        - y: Target variable (stock prices or price changes).</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Convert to numpy and clean data</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+
+        <span class="c1"># Handle NaNs and infinities</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">nan</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">posinf</span><span class="o">=</span><span class="mf">1e5</span><span class="p">,</span> <span class="n">neginf</span><span class="o">=-</span><span class="mf">1e5</span><span class="p">)</span>
+        <span class="n">y</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">nan</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">posinf</span><span class="o">=</span><span class="mf">1e5</span><span class="p">,</span> <span class="n">neginf</span><span class="o">=-</span><span class="mf">1e5</span><span class="p">)</span>
+
+        <span class="c1"># Validate input shapes</span>
+        <span class="k">if</span> <span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">!=</span> <span class="n">y</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]:</span>
+            <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="s2">&quot;X and y must have the same number of samples&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Standardize features</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scaler</span> <span class="o">=</span> <span class="n">StandardScaler</span><span class="p">()</span>
+        <span class="n">X_scaled</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaler</span><span class="o">.</span><span class="n">fit_transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+
+        <span class="c1"># Initialize and fit ARIMA</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">arima_model</span> <span class="o">=</span> <span class="n">SARIMAX</span><span class="p">(</span>
+                <span class="n">y</span><span class="p">,</span> <span class="n">order</span><span class="o">=</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">4</span><span class="p">),</span> <span class="n">seasonal_order</span><span class="o">=</span><span class="p">(</span><span class="mi">2</span><span class="p">,</span><span class="mi">1</span><span class="p">,</span><span class="mi">2</span><span class="p">,</span><span class="mi">6</span><span class="p">))</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">arima_model_fit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arima_model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">disp</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">maxiter</span><span class="o">=</span><span class="mi">200</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">Exception</span> <span class="k">as</span> <span class="n">e</span><span class="p">:</span>
+            <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">&quot;ARIMA failed: </span><span class="si">{</span><span class="nb">str</span><span class="p">(</span><span class="n">e</span><span class="p">)</span><span class="si">}</span><span class="s2">&quot;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">arima_model_fit</span> <span class="o">=</span> <span class="kc">None</span>
+
+        <span class="c1"># Fit GD/SGD models</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gd_model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_scaled</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sgd_model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_scaled</span><span class="p">,</span> <span class="n">y</span><span class="p">)</span>
+
+        <span class="c1"># Exponential smoothing components</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hwes_model</span> <span class="o">=</span> <span class="n">ExponentialSmoothing</span><span class="p">(</span><span class="n">y</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ses2</span> <span class="o">=</span> <span class="n">SimpleExpSmoothing</span><span class="p">(</span><span class="n">y</span><span class="p">,</span> <span class="n">initialization_method</span><span class="o">=</span><span class="s2">&quot;heuristic&quot;</span><span class="p">)</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span>
+            <span class="n">smoothing_level</span><span class="o">=</span><span class="mf">0.6</span><span class="p">,</span> <span class="n">optimized</span><span class="o">=</span><span class="kc">False</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Fit residual models</span>
+        <span class="n">residuals</span> <span class="o">=</span> <span class="n">y</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">gd_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_scaled</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lgbm_model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_scaled</span><span class="p">,</span> <span class="n">residuals</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">catboost_model</span><span class="o">.</span><span class="n">fit</span><span class="p">(</span><span class="n">X_scaled</span><span class="p">,</span> <span class="n">residuals</span><span class="p">)</span></div>
+
+
+<div class="viewcode-block" id="ARIMAXGBoost.predict">
+<a class="viewcode-back" href="../../../stock_prediction.core.html#stock_prediction.ARIMAXGBoost.predict">[docs]</a>
+    <span class="k">def</span><span class="w"> </span><span class="nf">predict</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">X</span><span class="p">):</span>
+<span class="w">        </span><span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Make predictions using the ARIMA + XGBoost model.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters:</span>
+<span class="sd">        - X: Features (lagged values, external features).</span>
+<span class="sd">        </span>
+<span class="sd">        Returns:</span>
+<span class="sd">        - Final predictions combining ARIMA and XGBoost.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c1"># Validate and clean input</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">asarray</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float64</span><span class="p">)</span>
+        <span class="n">X</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">X</span><span class="p">,</span> <span class="n">nan</span><span class="o">=</span><span class="mf">0.0</span><span class="p">,</span> <span class="n">posinf</span><span class="o">=</span><span class="mf">1e5</span><span class="p">,</span> <span class="n">neginf</span><span class="o">=-</span><span class="mf">1e5</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaler</span> <span class="ow">is</span> <span class="kc">None</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">RuntimeError</span><span class="p">(</span><span class="s2">&quot;Model not fitted yet&quot;</span><span class="p">)</span>
+
+        <span class="c1"># Scale features</span>
+        <span class="n">X_scaled</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">scaler</span><span class="o">.</span><span class="n">transform</span><span class="p">(</span><span class="n">X</span><span class="p">)</span>
+
+        <span class="c1"># Get component predictions</span>
+        <span class="n">predictions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        
+        <span class="c1"># ARIMA forecast</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">arima_model_fit</span><span class="p">:</span>
+            <span class="k">try</span><span class="p">:</span>
+                <span class="n">arima_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">arima_model_fit</span><span class="o">.</span><span class="n">forecast</span><span class="p">(</span><span class="n">steps</span><span class="o">=</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="k">except</span><span class="p">:</span>
+                <span class="n">arima_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">arima_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">X</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">])</span>
+
+        <span class="c1"># Exponential smoothing forecasts </span>
+        <span class="n">hwes_forecast</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">hwes_model</span><span class="o">.</span><span class="n">forecast</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">X</span><span class="p">))</span>
+        <span class="n">ses2_forecast</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ses2</span><span class="o">.</span><span class="n">forecast</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">X</span><span class="p">))</span>
+        
+
+        <span class="c1"># Gradient models</span>
+        <span class="n">gd_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">gd_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_scaled</span><span class="p">),</span> <span class="o">-</span><span class="mf">1e4</span><span class="p">,</span> <span class="mf">1e4</span><span class="p">)</span>
+        <span class="n">sgd_pred</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">clip</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sgd_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_scaled</span><span class="p">),</span> <span class="o">-</span><span class="mf">1e4</span><span class="p">,</span> <span class="mf">1e4</span><span class="p">)</span>
+
+        <span class="c1"># Boosting residuals</span>
+        <span class="n">lgbm_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lgbm_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_scaled</span><span class="p">)</span>
+        <span class="n">catboost_pred</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">catboost_model</span><span class="o">.</span><span class="n">predict</span><span class="p">(</span><span class="n">X_scaled</span><span class="p">)</span>
+
+        <span class="c1"># Combine predictions</span>
+        <span class="c1"># predictions = (</span>
+        <span class="c1">#     0.4 * arima_pred +</span>
+        <span class="c1">#     0.10 * (hwes_forecast + ses2_forecast) +</span>
+        <span class="c1">#     0.20 * (gd_pred + sgd_pred) +</span>
+        <span class="c1">#     0.05 * lgbm_pred +</span>
+        <span class="c1">#     0.05 * catboost_pred </span>
+        <span class="c1"># )</span>
+        <span class="n">predictions</span> <span class="o">=</span> <span class="p">(</span>
+        <span class="mf">0.10</span> <span class="o">*</span> <span class="n">arima_pred</span> <span class="o">+</span>              <span class="c1"># Reduce ARIMA dominance</span>
+        <span class="mf">0.05</span> <span class="o">*</span> <span class="p">(</span><span class="n">hwes_forecast</span> <span class="o">*</span> <span class="mf">0.6</span> <span class="o">+</span>    <span class="c1"># Weight HWES more than SES2</span>
+            <span class="n">ses2_forecast</span> <span class="o">*</span> <span class="mf">0.4</span><span class="p">)</span> <span class="o">+</span>
+        <span class="mf">0.85</span> <span class="o">*</span> <span class="p">(</span><span class="n">gd_pred</span> <span class="o">*</span> <span class="mf">0.8</span> <span class="o">+</span>         <span class="c1"># Favor GD over SGD</span>
+            <span class="n">sgd_pred</span> <span class="o">*</span> <span class="mf">0.2</span><span class="p">)</span> <span class="o">+</span>
+        <span class="mf">0.05</span> <span class="o">*</span> <span class="n">lgbm_pred</span> <span class="o">+</span>               <span class="c1"># Boost residual correction</span>
+        <span class="mf">0.05</span> <span class="o">*</span> <span class="n">catboost_pred</span>             <span class="c1"># Balance categorical handling</span>
+        <span class="p">)</span>
+
+        <span class="c1"># Final sanitization</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">nan_to_num</span><span class="p">(</span><span class="n">predictions</span><span class="p">,</span> <span class="n">nan</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">nanmean</span><span class="p">(</span><span class="n">predictions</span><span class="p">))</span></div>
+</div>
+
+
+    <span class="c1"># def predict(self, X):</span>
+    <span class="c1">#     # ARIMA forecasts</span>
+    <span class="c1">#     arima_forecast = self.arima_model_fit.forecast(steps=len(X))</span>
+    <span class="c1">#     hwes_forecast = self.hwes_model.forecast(len(X))</span>
+        
+    <span class="c1">#     # GD/SGD predictions</span>
+    <span class="c1">#     gd_pred = self.gd_model.predict(X)</span>
+    <span class="c1">#     sgd_pred = self.sgd_model.predict(X)</span>
+        
+    <span class="c1">#     # Boosting predictions</span>
+    <span class="c1">#     lgbm_pred = self.lgbm_model.predict(X)</span>
+    <span class="c1">#     # catboost_pred = self.catboost_model.predict(X)</span>
+
+    <span class="c1">#     # Ensemble</span>
+    <span class="c1">#     return 0.3*arima_forecast + 0.2*(gd_pred + sgd_pred) + 0.6*(lgbm_pred) + 0.2*hwes_forecast</span>
+
+<span class="c1"># class ARIMAXGBoost(BaseEstimator, RegressorMixin):</span>
+<span class="c1">#     &quot;&quot;&quot;Hybrid SARIMAX + Boosting ensemble with configurable components</span>
+
+<span class="c1">#     Parameters:</span>
+<span class="c1">#         sarima_order (tuple): (p,d,q) order for SARIMAX</span>
+<span class="c1">#         use_sarima (bool): Include SARIMAX component</span>
+<span class="c1">#         use_ses (bool): Include Simple Exponential Smoothing</span>
+<span class="c1">#         use_hwes (bool): Include Holt-Winters Exponential Smoothing</span>
+<span class="c1">#         use_stacking (bool): Include Stacking Regressor</span>
+<span class="c1">#         use_lgbm (bool): Include LightGBM</span>
+<span class="c1">#         use_catboost (bool): Include CatBoost</span>
+<span class="c1">#         weights (dict): Custom weights for model blending</span>
+<span class="c1">#     &quot;&quot;&quot;</span>
+
+<span class="c1">#     def __init__(self, xgb_params=None):</span>
+<span class="c1">#         &quot;&quot;&quot;</span>
+<span class="c1">#         Initialize the ARIMA + XGBoost model.</span>
+
+<span class="c1">#         Parameters:</span>
+<span class="c1">#         - arima_order: Tuple, order of the ARIMA model (p, d, q).</span>
+<span class="c1">#         - xgb_params: Dictionary, parameters for the XGBoost model.</span>
+<span class="c1">#         &quot;&quot;&quot;</span>
+<span class="c1">#         # self.arima_order = arima_order</span>
+<span class="c1">#         self.lstm_model = None</span>
+<span class="c1">#         self.prophet_model = None</span>
+<span class="c1">#         self.arima_model = None</span>
+<span class="c1">#         self.linear_model = LinearRegression()</span>
+<span class="c1">#         self.xgb_model = XGBRegressor()</span>
+<span class="c1">#         self.lasso_model = Lasso()</span>
+<span class="c1">#         self.rf_model = RandomForestRegressor()</span>
+<span class="c1">#         self.lgbm_model = LGBMRegressor(n_jobs=-1, verbose=100, verbosity=-1)</span>
+<span class="c1">#         # self.catboost_model = CatBoostRegressor(**dict([(&#39;bagging_temperature&#39;, 2), (&#39;boosting_type&#39;, &#39;Plain&#39;), (&#39;border_count&#39;, 128), (&#39;depth&#39;, 6), (&#39;iterations&#39;, 100), (&#39;l2_leaf_reg&#39;, 3), (&#39;learning_rate&#39;, 0.1), (&#39;loss_function&#39;, &#39;RMSE&#39;), (&#39;min_data_in_leaf&#39;, 1), (&#39;random_strength&#39;, 1)]))</span>
+<span class="c1">#         self.catboost_model = CatBoostRegressor(</span>
+<span class="c1">#             iterations=500,</span>
+<span class="c1">#             learning_rate=0.1,  # Step size shrinkage</span>
+<span class="c1">#             depth=6,  # Depth of the tree</span>
+<span class="c1">#             loss_function=&quot;RMSE&quot;,  # Loss function</span>
+<span class="c1">#             verbose=100,  # Log every 100 iterations</span>
+<span class="c1">#         )</span>
+
+<span class="c1">#         self.params = {}</span>
+
+<span class="c1">#     def fit(self, X, y):</span>
+<span class="c1">#         &quot;&quot;&quot;</span>
+<span class="c1">#         Fit the ARIMA and XGBoost models.</span>
+
+<span class="c1">#         Parameters:</span>
+<span class="c1">#         - X: Features (can include lagged values, external features, etc.).</span>
+<span class="c1">#         - y: Target variable (stock prices or price changes).</span>
+<span class="c1">#         &quot;&quot;&quot;</span>
+<span class="c1">#         self.arima_model = SARIMAX(</span>
+<span class="c1">#             y.values,</span>
+<span class="c1">#             order=(0, 1, 4),</span>
+<span class="c1">#             seasonal_order=(2, 1, 2, 6),  ##P = 4,# Q = 4 D = 6, #p  =6 ,d =1,q =4</span>
+<span class="c1">#         )</span>
+<span class="c1">#         self.arima_model_fit = self.arima_model.fit(disp=False)</span>
+<span class="c1">#         arima_predictions = self.arima_model_fit.predict()</span>
+
+<span class="c1">#         # self.var_model = VAR(X)</span>
+<span class="c1">#         # self.var_model_fit = self.var_model.predict()</span>
+<span class="c1">#         # var_predictions = self.var_model.predict(X)</span>
+<span class="c1">#         # if &#39;Close&#39; not in list(X.columns):</span>
+<span class="c1">#         #     self.ses1 = SimpleExpSmoothing(X[&#39;Adj Close&#39;], initialization_method=&quot;heuristic&quot;).fit(smoothing_level=0.2, optimized=False)</span>
+
+<span class="c1">#         #     self.ses2 = SimpleExpSmoothing(X[&#39;Adj Close&#39;], initialization_method=&quot;heuristic&quot;).fit(smoothing_level=0.6, optimized=False)</span>
+
+<span class="c1">#         #     self.ses3 = SimpleExpSmoothing(X[&#39;Adj Close&#39;], initialization_method=&quot;estimated&quot;).fit()</span>
+
+<span class="c1">#         # self.varmax_model = VARMAX( endog= y,exog= X, order =(1,1)).fit()</span>
+<span class="c1">#         self.hwes_model = ExponentialSmoothing(y.values).fit()</span>
+
+<span class="c1">#         self.ses1 = SimpleExpSmoothing(y.values, initialization_method=&quot;heuristic&quot;).fit(</span>
+<span class="c1">#             smoothing_level=0.2, optimized=False</span>
+<span class="c1">#         )</span>
+
+<span class="c1">#         self.ses2 = SimpleExpSmoothing(y.values, initialization_method=&quot;heuristic&quot;).fit(</span>
+<span class="c1">#             smoothing_level=0.6, optimized=False</span>
+<span class="c1">#         )</span>
+
+<span class="c1">#         self.ses3 = SimpleExpSmoothing(</span>
+<span class="c1">#             y.values, initialization_method=&quot;estimated&quot;</span>
+<span class="c1">#         ).fit()</span>
+
+<span class="c1">#         # forecast_input = X.values[-self.var_model_fit.k_ar:]  # Get the last &#39;k_ar&#39; rows for forecasting</span>
+<span class="c1">#         # var_predictions = self.var_model_fit.forecast(y=forecast_input, steps=len(y))</span>
+
+<span class="c1">#         # Base models (level-0)</span>
+<span class="c1">#         base_models = [</span>
+<span class="c1">#             (&quot;random_forest&quot;, RandomForestRegressor(n_estimators=100, random_state=42)),</span>
+<span class="c1">#             (</span>
+<span class="c1">#                 &quot;gradient_boosting&quot;,</span>
+<span class="c1">#                 GradientBoostingRegressor(n_estimators=100, random_state=42),</span>
+<span class="c1">#             ),</span>
+<span class="c1">#             (</span>
+<span class="c1">#                 &quot;svr&quot;,</span>
+<span class="c1">#                 SVR(kernel=&quot;rbf&quot;, C=1.0, epsilon=0.1),</span>
+<span class="c1">#                 (&quot;sdg&quot;, SGDRegressor(max_iter=1000, tol=1e-3)),</span>
+<span class="c1">#             ),</span>
+<span class="c1">#         ]</span>
+<span class="c1">#         # Meta-model (level-1)</span>
+<span class="c1">#         meta_model = self.lgbm_model</span>
+<span class="c1">#         # Stacking Regressor</span>
+<span class="c1">#         self.stacking_regressor = StackingRegressor(</span>
+<span class="c1">#             estimators=base_models, final_estimator=meta_model, cv=5</span>
+<span class="c1">#         )</span>
+<span class="c1">#         # Fit the stacking model</span>
+<span class="c1">#         self.stacking_regressor.fit(X, y)</span>
+
+<span class="c1">#         residuals = y - (1 / 3) * (</span>
+<span class="c1">#             arima_predictions</span>
+<span class="c1">#             # + self.ses1.fittedvalues</span>
+<span class="c1">#             + self.ses2.fittedvalues</span>
+<span class="c1">#             # + self.ses3.fittedvalues</span>
+<span class="c1">#             + self.hwes_model.fittedvalues</span>
+<span class="c1">#             # + self.stacking_regressor.predict(X)</span>
+<span class="c1">#         )</span>
+<span class="c1">#         # residuals = y - self.ses1.fittedvalues#.values</span>
+
+<span class="c1">#         # self.xgb_model.fit(X, residuals)</span>
+<span class="c1">#         # self.lasso_model.fit(X, residuals)</span>
+<span class="c1">#         # self.lasso_model.fit(StandardScaler().fit_transform(X), residuals)</span>
+<span class="c1">#         # self.rf_model.fit(X, residuals)</span>
+
+<span class="c1">#         # look_back = 60  # Number of lagged features</span>
+<span class="c1">#         # X_lagged, y_lagged = self.create_lagged_features(y, look_back)</span>
+<span class="c1">#         # X_combined = pd.concat([X.iloc[look_back:].reset_index(drop=True), X_lagged.reset_index(drop=True)], axis=1)</span>
+<span class="c1">#         # Step 4: Align residuals with lagged features</span>
+<span class="c1">#         # residuals_lagged = residuals.iloc[look_back:]</span>
+
+<span class="c1">#         # Step 5: Fit boosting models on lagged features and residuals</span>
+<span class="c1">#         # self.xgb_model.fit(X_lagged, residuals_lagged)</span>
+<span class="c1">#         # self.lgbm_model.fit(X_lagged, residuals_lagged)</span>
+<span class="c1">#         # self.catboost_model.fit(X_lagged, residuals_lagged)</span>
+<span class="c1">#         # Without lag</span>
+<span class="c1">#         self.lgbm_model.fit(X, residuals)</span>
+<span class="c1">#         self.catboost_model.fit(X, residuals)</span>
+
+<span class="c1">#         # self.catboost_model.fit(StandardScaler().fit_transform(X), residuals)</span>
+<span class="c1">#         # if &#39;Adj Close&#39; not in list(X.columns):</span>
+<span class="c1">#         #     X[&#39;Return&#39;] = X[&#39;Close&#39;].pct_change().dropna()</span>
+<span class="c1">#         # else:</span>
+<span class="c1">#         #     X[&#39;Return&#39;] = X[&#39;Adj Close&#39;].pct_change().dropna()</span>
+<span class="c1">#         # self.arch_model = arch_model(X[&#39;Return&#39;].dropna(), vol=&#39;Garch&#39;, p=1, q=1).fit(disp=&#39;off&#39;)</span>
+<span class="c1">#         # self.arch_model = arch_model(X[&#39;Return&#39;].dropna(), vol=&#39;Garch&#39;, p=1, q=1).fit(disp=&#39;off&#39;)</span>
+
+<span class="c1">#     def predict(self, X):</span>
+<span class="c1">#         &quot;&quot;&quot;</span>
+<span class="c1">#         Predict using the ARIMA + XGBoost model.</span>
+
+<span class="c1">#         Parameters:</span>
+<span class="c1">#         - X: Features (lagged values, external features).</span>
+
+<span class="c1">#         Returns:</span>
+<span class="c1">#         - Final predictions combining ARIMA and XGBoost.</span>
+<span class="c1">#         &quot;&quot;&quot;</span>
+
+<span class="c1">#         arima_predictions = self.arima_model_fit.forecast(steps=len(X))</span>
+<span class="c1">#         print(&quot;ARIMA predictions shape:&quot;, arima_predictions.shape)</span>
+<span class="c1">#         # vars_predictions = self.var_model_fit.forecast(horizon=len(X))</span>
+
+<span class="c1">#         ses_predictions_1 = self.ses1.forecast(len(X))  # .rename(r&quot;$\alpha=0.2$&quot;)</span>
+<span class="c1">#         ses_predictions_2 = self.ses2.forecast(len(X))  # .rename(r&quot;$\alpha=0.6$&quot;)</span>
+<span class="c1">#         ses_predictions_3 = self.ses3.forecast(len(X))</span>
+<span class="c1">#         # varmax_predictions = self.varmax_model.forecast(steps=len(X))</span>
+<span class="c1">#         hwes_predictions = self.hwes_model.forecast(steps=len(X))</span>
+<span class="c1">#         stacking_predictions = self.stacking_regressor.predict(X)</span>
+
+<span class="c1">#         # Step 3: Get boosting model predictions for residuals</span>
+<span class="c1">#         # xgb_residuals = self.xgb_model.predict(X_lagged)</span>
+<span class="c1">#         # lgbm_residuals = self.lgbm_model.predict(X_lagged)</span>
+<span class="c1">#         # catboost_residuals = self.catboost_model.predict(X_lagged)</span>
+
+<span class="c1">#         # xgb_predictions = self.xgb_model.predict(X)</span>
+<span class="c1">#         # lasso_predictions = self.lasso_model.predict(X)</span>
+<span class="c1">#         # lasso_predictions = self.lasso_model.predict(StandardScaler().fit_transform(X))</span>
+<span class="c1">#         # rf_predictions = self.rf_model.predict(X)</span>
+
+<span class="c1">#         lgbm_predictions = self.lgbm_model.predict(X)</span>
+<span class="c1">#         catboost_predictions = self.catboost_model.predict(X)</span>
+<span class="c1">#         # catboost_predictions = self.catboost_model.predict(StandardScaler().fit_transform(X))</span>
+
+<span class="c1">#         # # X[&#39;Return&#39;] = X[&#39;Adj Close&#39;].pct_change().dropna()</span>
+<span class="c1">#         # if &#39;Adj Close&#39; not in list(X.columns):</span>
+<span class="c1">#         #     X[&#39;Return&#39;] = X[&#39;Close&#39;].pct_change().dropna()</span>
+<span class="c1">#         # else:</span>
+<span class="c1">#         #     X[&#39;Return&#39;] = X[&#39;Adj Close&#39;].pct_change().dropna()</span>
+<span class="c1">#         # final_predictions = arch_predictions + lgbm_predictions</span>
+
+<span class="c1">#         # Step 3: Combine ARIMA predictions and XGBoost residuals predictions</span>
+<span class="c1">#         # final_predictions = arima_predictions + xgb_predictions</span>
+<span class="c1">#         # final_predictions = arima_predictions + lasso_predictions</span>
+<span class="c1">#         # final_predictions = arima_predictions + lgbm_predictions</span>
+
+<span class="c1">#         final_predictions = (1 / 3) * (</span>
+<span class="c1">#             arima_predictions</span>
+<span class="c1">#             # + ses_predictions_1</span>
+<span class="c1">#             + ses_predictions_2</span>
+<span class="c1">#             # + ses_predictions_3</span>
+<span class="c1">#             + hwes_predictions</span>
+<span class="c1">#             # + stacking_predictions</span>
+<span class="c1">#         ) + (1 / 2) * (lgbm_predictions + catboost_predictions)</span>
+
+<span class="c1">#         return final_predictions</span>
+    
+
+</pre></div>
+
+                </article>
+              
+              
+              
+              
+              
+                <footer class="prev-next-footer d-print-none">
+                  
+<div class="prev-next-area">
+</div>
+                </footer>
+              
+            </div>
+            
+            
+              
+            
+          </div>
+          <footer class="bd-footer-content">
+            
+          </footer>
+        
+      </main>
+    </div>
+  </div>
+  
+  <!-- Scripts loaded after <body> so the DOM is not blocked -->
+  <script defer src="../../../_static/scripts/bootstrap.js?digest=8878045cc6db502f8baf"></script>
+<script defer src="../../../_static/scripts/pydata-sphinx-theme.js?digest=8878045cc6db502f8baf"></script>
+
+  <footer class="bd-footer">
+<div class="bd-footer__inner bd-page-width">
+  
+    <div class="footer-items__start">
+      
+        <div class="footer-item">
+
+  <p class="copyright">
+    
+      © Copyright 2025, Jamie Yu.
+      <br/>
+    
+  </p>
+</div>
+      
+        <div class="footer-item">
+
+  <p class="sphinx-version">
+    Created using <a href="https://www.sphinx-doc.org/">Sphinx</a> 8.2.3.
+    <br/>
+  </p>
+</div>
+      
+    </div>
+  
+  
+  
+    <div class="footer-items__end">
+      
+        <div class="footer-item">
+<p class="theme-version">
+  <!-- # L10n: Setting the PST URL as an argument as this does not need to be localized -->
+  Built with the <a href="https://pydata-sphinx-theme.readthedocs.io/en/stable/index.html">PyData Sphinx Theme</a> 0.16.1.
+</p></div>
+      
+    </div>
+  
+</div>
+
+  </footer>
+  </body>
+</html>

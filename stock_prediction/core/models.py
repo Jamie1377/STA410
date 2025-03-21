@@ -30,6 +30,8 @@ from sklearn.metrics import mean_squared_error
 import numpy as np
 from statsmodels.tsa.holtwinters import ExponentialSmoothing, SimpleExpSmoothing
 from sklearn.preprocessing import StandardScaler
+import pmdarima as pm
+from pmdarima import auto_arima
 
 # Custom Gradient Descent Implementations #######################################
 class GradientDescentRegressor(BaseEstimator, RegressorMixin):
@@ -280,7 +282,19 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
 
         # Initialize and fit ARIMA
         try:
-            self.arima_model = SARIMAX(
+            # self.arima_model =  pm.auto_arima(
+            # y,
+            # seasonal=True, m=6,
+            # stepwise=True, trace=True,
+            # # start_p=1,
+            # d=1,
+            # error_action='ignore',
+            # suppress_warnings=True,
+            # information_criterion='aic',
+            # max_order=10  # Limit parameter search space
+            # )
+            # self.arima_model_fit = self.arima_model
+            self.arima_model =  SARIMAX(
                 y, order=(0,1,4), seasonal_order=(2,1,2,6))
             self.arima_model_fit = self.arima_model.fit(disp=False, maxiter=200)
         except Exception as e:
@@ -329,6 +343,7 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         if self.arima_model_fit:
             try:
                 arima_pred = self.arima_model_fit.forecast(steps=X.shape[0])
+                # arima_pred = self.arima_model_fit.predict(n_periods=X.shape[0],return_conf_int=False)
             except:
                 arima_pred = np.zeros(X.shape[0])
         else:

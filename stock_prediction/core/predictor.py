@@ -57,6 +57,8 @@ class StockPredictor:
         self.scalers = {}
         self.transformers = {}
         self.interval = interval
+        self.history = []  # New attribute for error correction
+
 
         # self.one_step_forward_forecast = {}
 
@@ -775,22 +777,24 @@ class StockPredictor:
             self.scalers[predictor] = scaler
             self.transformers[predictor] = poly
 
+
+
     def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
         """
-        Perform one-step forward predictions for all predictors.
+        Perform one-step forward predictions for all predictors with enhanced methods.
 
         Parameters:
         -----------
         predictors : List[str]
             List of predictor column names
         model_type : str
-            one of the
-        horizon : int, optional
-            Number of days to forecast (default: 20)
+            one of the model types
+        horizon : int
+            Number of days to forecast
 
         Returns:
         --------
-        Tuple[pd.DataFrame, pd.DataFrame]z
+        Tuple[pd.DataFrame, pd.DataFrame]
             Forecasted data and backtest data
         """
         # Ensure models are prepared
@@ -798,209 +802,1158 @@ class StockPredictor:
             raise ValueError("Please run prepare_models() first")
 
         # Initialize prediction and backtest DataFrames
-        prediction = self.data[predictors].copy().iloc[-horizon:,].dropna()
-        backtest = self.data[predictors].copy().iloc[:-horizon,].dropna()
+        prediction = self.data[predictors].copy().iloc[-horizon:].dropna()
+        backtest = self.data[predictors].copy().iloc[:-horizon].dropna()
         observation = self.data[predictors].copy().dropna()
+        # raw_backtest = self.data[predictors].copy().iloc[:-horizon].dropna()
+        
+        # Initialize arrays for storing predictions
+        pred_array = np.zeros((horizon, len(predictors)))
+        backtest_array = np.zeros((horizon, len(predictors)))
+        raw_backtest_array = np.zeros((horizon, len(predictors)))
+        
+        # Create maps for quick lookup
+        pred_dates = []
+        backtest_dates = []
+        predictor_indices = {p: i for i, p in enumerate(predictors)}
+        
+        # Initialize error correction mechanisms
+        # 1. Base correction factors
+        error_correction = {predictor: 1.0 for predictor in predictors}
+        
+        # 2. Feature-specific correction bounds
+        price_vars = ["Open", "High", "Low", "Close"]
+        bounds = {}
+        for p in predictors:
+            if p in price_vars:
+                bounds[p] = (0.975, 1.025)  # Tighter bounds for prices
+            elif p.startswith("MA_"):
+                bounds[p] = (0.975, 1.025)  # Even tighter for moving averages
+            else:
+                bounds[p] = (0.5, 1.5)  # Wider for other indicators
+        
+        # 3. Initialize regime detection
+        regime = "normal"  # Default regime
+        price_changes = []
+        
+        # 4. Initialize Kalman filter parameters (simplified)
+        kalman_gain = {p: 0.2 for p in predictors}
+        error_variance = {p: 1.0 for p in predictors}
+        
+        # 5. Create ensembles of correction factors
+        ensemble_corrections = {
+            p: [0.95, 1.0, 1.05] for p in predictors
+        }
+        ensemble_weights = {
+            p: np.array([0.25, 0.5, 0.25]) for p in predictors
+        }
+        
+        # Calculate initial volatility (if Close is in predictors)
+        if "Close" in predictors:
+            close_history = observation["Close"].tail(20)
+            returns = close_history.pct_change().dropna()
+            current_volatility = returns.std() * np.sqrt(252)  # Annualized volatility
+        else:
+            current_volatility = 0.2  # Default volatility assumption
+            
+        # Helper functions
+        def update_regime(prev_values, new_value):
+            """Update market regime based on recent price action"""
+            if len(prev_values) < 2:
+                return "normal"
+                
+            # Calculate recent returns
+            recent_returns = np.diff(prev_values) / prev_values[:-1]
+            
+            # Calculate volatility
+            vol = np.std(recent_returns) * np.sqrt(252)
+            
+            # Detect trend
+            trend = sum(1 if r > 0 else -1 for r in recent_returns)
+            
+            if vol > 0.4:  # High volatility threshold
+                return "volatile"
+            elif abs(trend) > len(recent_returns) * 0.7:  # Strong trend
+                return "trending"
+            else:
+                return "mean_reverting"
+        
+        def adaptive_bounds(predictor, volatility, regime):
+            """Calculate adaptive bounds based on volatility and regime"""
+            base_lower, base_upper = bounds[predictor]
+            
+            # Adjust bounds based on regime
+            if regime == "volatile":
+                # Wider bounds during volatility
+                lower = base_lower - 0.1
+                upper = base_upper + 0.1
+            elif regime == "trending":
+                # Asymmetric bounds for trending markets
+                if predictor in price_vars:
+                    recent_trend = np.mean(price_changes[-5:]) if len(price_changes) >= 5 else 0
+                    if recent_trend > 0:
+                        # Uptrend - allow more upside correction
+                        lower = base_lower
+                        upper = base_upper + 0.05
+                    else:
+                        # Downtrend - allow more downside correction
+                        lower = base_lower - 0.05
+                        upper = base_upper
+                else:
+                    lower, upper = base_lower, base_upper
+            else:
+                # Default bounds
+                lower, upper = base_lower, base_upper
+                
+            # Further adjust based on volatility
+            vol_factor = min(1.0, volatility / 0.2)  # Normalize volatility
+            lower -= 0.05 * vol_factor
+            upper += 0.05 * vol_factor
+            
+            return max(0.5, lower), min(2.0, upper)  # Hard limits
+        
+        def apply_kalman_update(predictor, predicted, actual, step):
+            """Apply Kalman filter update to correction factor"""
+            # global kalman_gain, error_variance
+            
+            # Skip if we don't have actual to compare
+            if actual is None:
+                return error_correction[predictor]
+                
+            # Calculate prediction error
+            pred_error = (actual - predicted) / actual  if predicted != 0 else 0
+            
+            # Update error variance estimate (simplified)
+            error_variance[predictor] = 0.7 * error_variance[predictor] + 0.3 * (pred_error ** 2)
+            
+            # Update Kalman gain 
+            k_gain = error_variance[predictor] / (error_variance[predictor] + 0.1)
+            kalman_gain[predictor] = min(0.5, max(0.05, k_gain))  # Bounded gain
+            
+            # Exponentially reduce gain with forecast horizon
+            horizon_factor = np.exp(-0.1 * step)
+            effective_gain = kalman_gain[predictor] * horizon_factor
+            
+            # Calculate correction factor
+            correction = 1.0 + effective_gain * pred_error
+            
+            return correction
+        
+        def enforce_constraints(pred_values, step):
+            """Enforce cross-variable constraints"""
+            if all(p in predictors for p in ["Open", "High", "Low", "Close"]):
+                # Get indices
+                o_idx = predictor_indices["Open"]
+                h_idx = predictor_indices["High"]
+                l_idx = predictor_indices["Low"]
+                c_idx = predictor_indices["Close"]
+                
+                # Ensure High is highest
+                highest = max(
+                    pred_values[step, o_idx],
+                    pred_values[step, c_idx],
+                    pred_values[step, h_idx]
+                )
+                pred_values[step, h_idx] = highest
+                
+                # Ensure Low is lowest
+                lowest = min(
+                    pred_values[step, o_idx],
+                    pred_values[step, c_idx],
+                    pred_values[step, l_idx]
+                )
+                pred_values[step, l_idx] = lowest
+                
+            return pred_values
+        
+        # Main forecasting loop
+        for step in range(horizon):
+            # Get last known dates
+            if step == 0:
+                last_pred_row = prediction.iloc[-1]
+                last_backtest_row = backtest.iloc[-1]
+                last_pred_date = last_pred_row.name
+                last_backtest_date = last_backtest_row.name
+
+                # last_pred_row = prediction.iloc[-horizon:,].mean( axis=0)
+                # last_backtest_row = backtest.iloc[-horizon:,].mean(axis=0)
+            else:
+                last_pred_date = pred_dates[-1]
+                last_backtest_date = backtest_dates[-1]
+                
+            
+            # Calculate next dates
+            next_pred_date = get_next_valid_date(pd.Timestamp(last_pred_date))
+            next_backtest_date = get_next_valid_date(pd.Timestamp(last_backtest_date))
+            pred_dates.append(next_pred_date)
+            backtest_dates.append(next_backtest_date)
+            
+            # # Step 1: Update market regime if we have Close
+            # if "Close" in predictors and step > 0:
+            #     # Get recent close values
+            #     close_idx = predictor_indices["Close"]
+            #     if step >1:
+            #         recent_close_vals = pred_array[:step, close_idx]
+            #         regime = update_regime(recent_close_vals, None)
+                    
+            #         # Also track price changes for trending analysis
+            #         if step > 1:
+            #             price_changes.append(pred_array[step-1, close_idx] - pred_array[step-2, close_idx])
+            
+            # Step 2: First handle Close price prediction (which others depend on)
+            if "Close" in predictors:
+                close_idx = predictor_indices["Close"]
+                close_features = [col for col in predictors if col != "Close"]
+                
+                # Prepare input data - use last available information
+                if step == 0:
+                    pred_input = last_pred_row[close_features].values
+                    backtest_input = last_backtest_row[close_features].values
+                    raw_backtest_input = last_backtest_row[close_features].values
+                else:
+                    # Construct from previous predictions
+                    pred_input = np.array([
+                        pred_array[step-1, predictor_indices[feat]] 
+                        for feat in close_features
+                    ])
+                    backtest_input = np.array([
+                        backtest_array[step-1, predictor_indices[feat]]
+                        for feat in close_features
+                    ])
+                    raw_backtest_input = np.array([
+                        raw_backtest_array[step-1, predictor_indices[feat]]
+                        for feat in close_features
+                    ])
+                
+                # Apply model for Close price
+                close_model = self.models["Close"][model_type]
+                
+                # Vector prediction for both datasets
+                raw_pred_close = close_model.predict(pred_input.reshape(1, -1))[0]
+                raw_backtest_close = close_model.predict(backtest_input.reshape(1, -1))[0]
+                raw_backtest_raw_close = close_model.predict(raw_backtest_input.reshape(1, -1))[0]
+                
+                # Apply ensemble correction - weighted average of multiple correction factors
+                ensemble_pred = 0
+                ensemble_backtest = 0
+                for i, corr in enumerate(ensemble_corrections["Close"]):
+                    ensemble_pred += raw_pred_close * corr * ensemble_weights["Close"][i]
+                    ensemble_backtest += raw_backtest_close * corr * ensemble_weights["Close"][i]
+                
+                # Apply the main error correction with adaptive bounds
+                lower_bound, upper_bound = adaptive_bounds("Close", current_volatility, regime)
+                close_correction = max(lower_bound, min(upper_bound, error_correction["Close"]))
+                
+                pred_close = ensemble_pred * close_correction
+                backtest_close = ensemble_backtest * close_correction
+                
+                # Store predictions
+                pred_array[step, close_idx] = pred_close
+                backtest_array[step, close_idx] = backtest_close
+                raw_backtest_array[step, close_idx] = raw_backtest_raw_close
+
+                # Store predictions v2 mirror original code
+                pred_array[step, close_idx] = raw_pred_close
+                backtest_array[step, close_idx] = raw_backtest_close
+                raw_backtest_array[step, close_idx] = raw_backtest_raw_close
+                
+                
+                # Update volatility estimate
+                if step > 0:
+                    prev_close = pred_array[step-1, close_idx]
+                    returns = (pred_close / prev_close) - 1
+                    current_volatility = 0.94 * current_volatility + 0.06 * abs(returns) * np.sqrt(252)
+            
+            # Step 3: Now handle other predictors
+            for predictor in predictors:
+                if predictor == "Close":
+                    continue  # Already handled
+                    
+                pred_idx = predictor_indices[predictor]
+                
+                # Special handling for MA calculations - direct calculation rather than model
+                if predictor == "MA_50" and "Close" in predictors:
+                    close_idx = predictor_indices["Close"]
+                    
+                    # Get recent Close values to calculate MA
+                    if step == 0:
+                        # Use historical data for initial MA calculation
+                        hist_close_pred = observation["Close"].values[-49:]
+                        hist_close_backtest = backtest["Close"].values[-49:]
+                        hist_close_raw_backtest = backtest["Close"].values[-49:]
+                    else:
+                        # Combine historical with predicted for later steps
+                        pred_close_history = pred_array[:step, close_idx]
+                        backtest_close_history = backtest_array[:step, close_idx]
+                        raw_backtest_close_history = raw_backtest_array[:step, close_idx]
+                        
+                        # Concatenate with appropriate historical data
+                        if len(pred_close_history) < 49:
+                            hist_close_pred = np.concatenate([
+                                observation["Close"].values[-(49-len(pred_close_history)):],
+                                pred_close_history
+                            ])
+                            hist_close_backtest = np.concatenate([
+                                backtest["Close"].values[-(49-len(backtest_close_history)):],
+                                backtest_close_history
+                            ])
+                            hist_close_raw_backtest = np.concatenate([
+                                backtest["Close"].values[-(49-len(raw_backtest_close_history)):],
+                                raw_backtest_close_history
+                            ])
+                        else:
+                            hist_close_pred = pred_close_history[-49:]
+                            hist_close_backtest = backtest_close_history[-49:]
+                            hist_close_raw_backtest = raw_backtest_close_history[-49:]
+                    
+                    # Get current Close predictions
+                    current_pred_close = pred_array[step, close_idx]
+                    current_backtest_close = backtest_array[step, close_idx]
+                    current_raw_close = raw_backtest_array[step, close_idx]
+                    
+                    # Calculate MA_50 (vectorized)
+                    ma50_pred = np.mean(np.append(hist_close_pred, current_pred_close))
+                    ma50_backtest = np.mean(np.append(hist_close_backtest, current_backtest_close))
+                    ma50_raw_backtest = np.mean(np.append(hist_close_raw_backtest, current_raw_close))
+                    
+                    # Store MA_50 values
+                    pred_array[step, pred_idx] = ma50_pred
+                    backtest_array[step, pred_idx] = ma50_backtest
+                    raw_backtest_array[step, pred_idx] = ma50_raw_backtest
+                    
+                elif predictor == "MA_200" and "Close" in predictors:
+                    close_idx = predictor_indices["Close"]
+                    
+                    # Similar approach for MA_200
+                    if step == 0:
+                        hist_close_pred = observation["Close"].values[-199:]
+                        hist_close_backtest = backtest["Close"].values[-199:]
+                        hist_close_raw_backtest = backtest["Close"].values[-199:]
+                    else:
+                        pred_close_history = pred_array[:step, close_idx]
+                        backtest_close_history = backtest_array[:step, close_idx]
+                        raw_backtest_close_history = raw_backtest_array[:step, close_idx]
+                        
+                        if len(pred_close_history) < 199:
+                            hist_close_pred = np.concatenate([
+                                observation["Close"].values[-(199-len(pred_close_history)):],
+                                pred_close_history
+                            ])
+                            hist_close_backtest = np.concatenate([
+                                backtest["Close"].values[-(199-len(backtest_close_history)):],
+                                backtest_close_history
+                            ])
+                            hist_close_raw_backtest = np.concatenate([
+                                backtest["Close"].values[-(199-len(raw_backtest_close_history)):],
+                                raw_backtest_close_history
+                            ])
+                        else:
+                            hist_close_pred = pred_close_history[-199:]
+                            hist_close_backtest = backtest_close_history[-199:]
+                            hist_close_raw_backtest = raw_backtest_close_history[-199:]
+                    
+                    current_pred_close = pred_array[step, close_idx]
+                    current_backtest_close = backtest_array[step, close_idx]
+                    current_raw_backtest_close = raw_backtest_array[step, close_idx]
+                    
+                    ma200_pred = np.mean(np.append(hist_close_pred, current_pred_close))
+                    ma200_backtest = np.mean(np.append(hist_close_backtest, current_backtest_close))
+                    ma200_raw_backtest = np.mean(np.append(hist_close_raw_backtest, current_raw_backtest_close))
+                    
+                    pred_array[step, pred_idx] = ma200_pred
+                    backtest_array[step, pred_idx] = ma200_backtest
+                    raw_backtest_array[step, pred_idx] = ma200_raw_backtest
+                    
+                elif predictor == "Daily Returns" and "Close" in predictors:
+                    close_idx = predictor_indices["Close"]
+                    
+                    # Calculate daily returns from consecutive Close prices
+                    if step == 0:
+                        # Get last actual Close from data
+                        prev_close_pred = observation["Close"].values[-1]
+                        prev_close_backtest = backtest["Close"].values[-1]
+                        prev_close_raw_backtest = backtest["Close"].values[-1]
+                    else:
+                        # Use previous predicted Close
+                        prev_close_pred = pred_array[step-1, close_idx]
+                        prev_close_backtest = backtest_array[step-1, close_idx]
+                        prev_close_raw_backtest = raw_backtest_array[step-1, close_idx]
+                    
+                    # Get current predicted Close
+                    current_close_pred = pred_array[step, close_idx]
+                    current_close_backtest = backtest_array[step, close_idx]
+                    current_close_raw_backtest = raw_backtest_array[step, close_idx]
+                    
+                    # Calculate returns (handle division by zero)
+                    if prev_close_pred != 0:
+                        daily_return_pred = (current_close_pred / prev_close_pred) - 1
+                    else:
+                        daily_return_pred = 0
+                        
+                    if prev_close_backtest != 0:
+                        daily_return_backtest = (current_close_backtest / prev_close_backtest) - 1
+                    else:
+                        daily_return_backtest = 0
+                    
+                    if prev_close_raw_backtest != 0:
+                        daily_return_raw_backtest = (current_close_raw_backtest / prev_close_raw_backtest) - 1
+                    else:
+                        daily_return_raw_backtest = 0
+                    
+                    # Store daily returns
+                    pred_array[step, pred_idx] = daily_return_pred
+                    backtest_array[step, pred_idx] = daily_return_backtest
+                    raw_backtest_array[step, pred_idx] = daily_return_raw_backtest
+                    
+                elif predictor == "VIX" and "Close" in predictors:
+                    # Use current volatility estimate directly
+                    pred_array[step, pred_idx] = current_volatility
+                    backtest_array[step, pred_idx] = current_volatility
+                    raw_backtest_array[step, pred_idx] = current_volatility
+                    
+                else:
+                    # Regular predictor - use model
+                    features = [col for col in predictors if col != predictor]
+                    
+                    # Prepare input data
+                    if step == 0:
+                        pred_input = last_pred_row[features].values
+                        backtest_input = last_backtest_row[features].values
+                    else:
+                        # Use previous predictions as features
+                        pred_input = np.array([
+                            pred_array[step-1, predictor_indices[feat]] 
+                            for feat in features
+                        ])
+                        backtest_input = np.array([
+                            backtest_array[step-1, predictor_indices[feat]]
+                            for feat in features
+                        ])
+                    
+                    # Get model predictions
+                    model = self.models[predictor][model_type]
+                    raw_pred = model.predict(pred_input.reshape(1, -1))[0]
+                    raw_backtest = model.predict(backtest_input.reshape(1, -1))[0]
+                    
+                    # Apply adaptive correction
+                    # lower_bound, upper_bound = adaptive_bounds(predictor, current_volatility, regime)
+                    # predictor_correction = max(lower_bound, min(upper_bound, error_correction[predictor]))
+                    
+                    # Apply Kalman filter update for backtest
+                    # (we can compare backtest with actual historical data)
+                    # actual_value = None
+                    # if next_backtest_date in self.data.index and predictor in self.data.columns:
+                    #     # actual_value = self.data.loc[next_backtest_date, predictor]
+                    #     actual_value = self.data[self.data.index == next_backtest_date][predictor].values[0]
+                    #     kalman_correction = apply_kalman_update(predictor, raw_backtest, actual_value, step)
+                    #     # Update the main correction factor with the Kalman result
+                    #     error_correction[predictor] = 0.7 * error_correction[predictor] + 0.3 * kalman_correction
+                    
+                    # Apply correction
+                    # # pred_value = raw_pred * predictor_correction
+                    # # backtest_value = raw_backtest * predictor_correction
+                    # # raw_backtest_value = raw_backtest
+                    
+                    # # Store predictions
+                    # pred_array[step, pred_idx] = pred_value
+                    # backtest_array[step, pred_idx] = backtest_value
+                    # raw_backtest_array[step, pred_idx] = raw_backtest_value
+                    
+                    # Store predictions v2 mirror original code
+                    pred_array[step, pred_idx] = raw_pred
+                    backtest_array[step, pred_idx] = raw_backtest
+                    raw_backtest_array[step, pred_idx] = raw_backtest
+
+
+            
+            # Step 4: Apply cross-variable constraints
+            pred_array = enforce_constraints(pred_array, step)
+            backtest_array = enforce_constraints(backtest_array, step)
+            
+            # # Step 5: Update ensemble weights based on performance (for backtest)
+            # if step > 0 and step % 5 == 0:
+            #     for predictor in predictors:
+            #         # Skip if we don't have enough data
+            #         if len(pred_dates) < 5:
+            #             continue
+                        
+            #         pred_idx = predictor_indices[predictor]
+                    
+            #         # Check if we have actual data to compare with backtest
+            #         actual_values = []
+            #         for date in backtest_dates[-5:]:
+            #             if date in self.data.index and predictor in self.data.columns:
+            #                 actual_values.append(self.data.loc[date, predictor])
+                    
+            #         if len(actual_values) >= 3:  # Need enough data points
+            #             # Calculate errors for each ensemble member
+            #             errors = []
+            #             for i, corr in enumerate(ensemble_corrections[predictor]):
+            #                 # Get predictions with this correction factor
+            #                 corrected_preds = backtest_array[-len(actual_values):, pred_idx] * corr
+                            
+            #                 # Calculate mean squared error
+            #                 mse = np.mean((corrected_preds - actual_values) ** 2)
+            #                 errors.append(mse)
+                        
+            #             # Convert errors to weights (smaller error -> higher weight)
+            #             if max(errors) > min(errors):  # Avoid division by zero
+            #                 inv_errors = 1.0 / (np.array(errors) + 1e-10)
+            #                 new_weights = inv_errors / sum(inv_errors)
+                            
+            #                 # Update weights with smoothing
+            #                 ensemble_weights[predictor] = 0.7 * ensemble_weights[predictor] + 0.3 * new_weights
+        
+        # Convert arrays to DataFrames
+        prediction_df = pd.DataFrame(
+            pred_array,
+            columns=predictors,
+            index=pred_dates
+        )
+        
+        backtest_df = pd.DataFrame(
+            backtest_array,
+            columns=predictors,
+            index=backtest_dates
+        )
+
+        raw_backtest_df = pd.DataFrame(
+            raw_backtest_array,
+            columns=predictors,
+            index=backtest_dates
+        )
+        
+        
+        # Concatenate with original data to include history
+        final_prediction = pd.concat([prediction, prediction_df])
+        final_backtest = pd.concat([backtest, backtest_df])
+        final_raw_backtest= pd.concat([backtest, raw_backtest_df])
+        
+        return final_prediction, final_backtest, final_raw_backtest
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+    # CLD V1
+    # def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
+    #     """
+    #     Perform one-step forward predictions for all predictors.
+
+    #     Parameters:
+    #     -----------
+    #     predictors : List[str]
+    #         List of predictor column names
+    #     model_type : str
+    #         one of the model types
+    #     horizon : int
+    #         Number of days to forecast
+
+    #     Returns:
+    #     --------
+    #     Tuple[pd.DataFrame, pd.DataFrame]
+    #         Forecasted data and backtest data
+    #     """
+    #     # Ensure models are prepared
+    #     if not self.models:
+    #         raise ValueError("Please run prepare_models() first")
+
+    #     # Initialize prediction and backtest DataFrames
+    #     prediction = self.data[predictors].copy().iloc[-horizon:].dropna()
+    #     backtest = self.data[predictors].copy().iloc[:-horizon].dropna()
+    #     observation = self.data[predictors].copy().dropna()
+
+    #     # Initialize numpy arrays for vectorized operations
+    #     pred_values = np.zeros((horizon, len(predictors)))
+    #     pred_dates = []
+    #     backtest_values = np.zeros((horizon, len(predictors)))
+    #     backtest_dates = []
+        
+    #     # Error correction factors (initialized to 1.0 - no correction)
+    #     error_correction = {predictor: 1.0 for predictor in predictors}
+        
+    #     # Create mapping from predictor names to column indices
+    #     predictor_to_idx = {predictor: i for i, predictor in enumerate(predictors)}
+
+    #     for step in range(horizon):
+    #         # Get the latest available data
+    #         if step == 0:
+    #             last_pred_row = prediction.iloc[-1]
+    #             last_backtest_row = backtest.iloc[-1]
+    #             last_pred_date = last_pred_row.name
+    #             last_backtest_date = last_backtest_row.name
+    #         else:
+    #             last_pred_date = pred_dates[-1]
+    #             last_backtest_date = backtest_dates[-1]
+                
+    #             # Create temporary DataFrames for previous predictions
+    #             temp_pred_df = pd.DataFrame(
+    #                 pred_values[:step], 
+    #                 columns=predictors, 
+    #                 index=pred_dates
+    #             )
+    #             temp_backtest_df = pd.DataFrame(
+    #                 backtest_values[:step], 
+    #                 columns=predictors, 
+    #                 index=backtest_dates
+    #             )
+                
+    #             # Combine with original data
+    #             combined_pred = pd.concat([prediction, temp_pred_df])
+    #             combined_backtest = pd.concat([backtest, temp_backtest_df])
+                
+    #             # Get the latest rows
+    #             last_pred_row = combined_pred.iloc[-1]
+    #             last_backtest_row = combined_backtest.iloc[-1]
+
+    #         # Calculate next dates
+    #         next_pred_date = get_next_valid_date(pd.Timestamp(last_pred_date))
+    #         next_backtest_date = get_next_valid_date(pd.Timestamp(last_backtest_date))
+    #         pred_dates.append(next_pred_date)
+    #         backtest_dates.append(next_backtest_date)
+
+    #         # First predict Close (if it's in the predictors list)
+    #         if "Close" in predictors:
+    #             close_idx = predictor_to_idx["Close"]
+    #             close_features = [col for col in predictors if col != "Close"]
+                
+    #             # Prepare input data for Close prediction
+    #             if step == 0:
+    #                 # Use original data
+    #                 pred_features = last_pred_row[close_features].values
+    #                 backtest_features = last_backtest_row[close_features].values
+    #             else:
+    #                 # Use combination of original and predicted features
+    #                 pred_features = np.array([
+    #                     pred_values[step-1, predictor_to_idx[feat]] if step > 0 else last_pred_row[feat]
+    #                     for feat in close_features
+    #                 ])
+    #                 backtest_features = np.array([
+    #                     backtest_values[step-1, predictor_to_idx[feat]] if step > 0 else last_backtest_row[feat]
+    #                     for feat in close_features
+    #                 ])
+                
+    #             # Make predictions for Close
+    #             close_model = self.models["Close"][model_type]
+    #             pred_close = close_model.predict(pred_features.reshape(1, -1))[0]
+    #             backtest_close = close_model.predict(backtest_features.reshape(1, -1))[0]
+                
+    #             # Apply error correction
+    #             pred_close *= error_correction["Close"]
+    #             backtest_close *= error_correction["Close"]
+                
+    #             # Store Close predictions
+    #             pred_values[step, close_idx] = pred_close
+    #             backtest_values[step, close_idx] = backtest_close
+
+    #         # Then predict other variables
+    #         for predictor in predictors:
+    #             if predictor == "Close":
+    #                 continue  # Already handled
+                    
+    #             predictor_idx = predictor_to_idx[predictor]
+                
+    #             # Special handling for MA_50 and MA_200
+    #             if predictor == "MA_50" and "Close" in predictors:
+    #                 close_idx = predictor_to_idx["Close"]
+                    
+    #                 # Get historical Close values
+    #                 if step == 0:
+    #                     # Use only historical data
+    #                     hist_close_pred = observation["Close"].values[-49:]
+    #                     hist_close_backtest = backtest["Close"].values[-49:]
+    #                 else:
+    #                     # Combine historical with predicted values
+    #                     pred_close_values = pred_values[:step, close_idx]
+    #                     backtest_close_values = backtest_values[:step, close_idx]
+                        
+    #                     hist_close_pred = np.concatenate([
+    #                         observation["Close"].values[-(50-step):] if 50-step > 0 else [],
+    #                         pred_close_values
+    #                     ])
+    #                     hist_close_backtest = np.concatenate([
+    #                         backtest["Close"].values[-(50-step):] if 50-step > 0 else [],
+    #                         backtest_close_values
+    #                     ])
+                    
+    #                 # Add current predicted Close
+    #                 pred_close = pred_values[step, close_idx]
+    #                 backtest_close = backtest_values[step, close_idx]
+                    
+    #                 # Calculate MA_50 with vectorized operations
+    #                 ma50_pred = np.mean(np.append(hist_close_pred, pred_close)[-50:])
+    #                 ma50_backtest = np.mean(np.append(hist_close_backtest, backtest_close)[-50:])
+                    
+    #                 # Store MA_50 predictions
+    #                 pred_values[step, predictor_idx] = ma50_pred
+    #                 backtest_values[step, predictor_idx] = ma50_backtest
+                    
+    #             elif predictor == "MA_200" and "Close" in predictors:
+    #                 close_idx = predictor_to_idx["Close"]
+                    
+    #                 # Similar approach for MA_200
+    #                 if step == 0:
+    #                     hist_close_pred = observation["Close"].values[-199:]
+    #                     hist_close_backtest = backtest["Close"].values[-199:]
+    #                 else:
+    #                     pred_close_values = pred_values[:step, close_idx]
+    #                     backtest_close_values = backtest_values[:step, close_idx]
+                        
+    #                     hist_close_pred = np.concatenate([
+    #                         observation["Close"].values[-(200-step):] if 200-step > 0 else [],
+    #                         pred_close_values
+    #                     ])
+    #                     hist_close_backtest = np.concatenate([
+    #                         backtest["Close"].values[-(200-step):] if 200-step > 0 else [],
+    #                         backtest_close_values
+    #                     ])
+                    
+    #                 pred_close = pred_values[step, close_idx]
+    #                 backtest_close = backtest_values[step, close_idx]
+                    
+    #                 # Calculate MA_200 with vectorized operations
+    #                 ma200_pred = np.mean(np.append(hist_close_pred, pred_close)[-200:])
+    #                 ma200_backtest = np.mean(np.append(hist_close_backtest, backtest_close)[-200:])
+                    
+    #                 pred_values[step, predictor_idx] = ma200_pred
+    #                 backtest_values[step, predictor_idx] = ma200_backtest
+                    
+    #             else:
+    #                 # For other predictors, use the model
+    #                 features = [col for col in predictors if col != predictor]
+                    
+    #                 # Prepare input features
+    #                 if step == 0:
+    #                     # Get features from the last row
+    #                     pred_features = last_pred_row[features].values
+    #                     backtest_features = last_backtest_row[features].values
+    #                 else:
+    #                     # Get features from previous predictions
+    #                     pred_features = np.array([
+    #                         pred_values[step-1, predictor_to_idx[feat]] 
+    #                         for feat in features
+    #                     ])
+    #                     backtest_features = np.array([
+    #                         backtest_values[step-1, predictor_to_idx[feat]]
+    #                         for feat in features
+    #                     ])
+                    
+    #                 # Make predictions
+    #                 model = self.models[predictor][model_type]
+    #                 pred_value = model.predict(pred_features.reshape(1, -1))[0]
+    #                 backtest_value = model.predict(backtest_features.reshape(1, -1))[0]
+                    
+    #                 # Apply error correction
+    #                 pred_value *= error_correction[predictor]
+    #                 backtest_value *= error_correction[predictor]
+                    
+    #                 # Store predictions
+    #                 pred_values[step, predictor_idx] = pred_value
+    #                 backtest_values[step, predictor_idx] = backtest_value
+            
+    #         # Apply business logic constraints
+    #         if "Low" in predictors and "Close" in predictors:
+    #             low_idx = predictor_to_idx["Low"]
+    #             close_idx = predictor_to_idx["Close"]
+                
+    #             # Ensure Close is not less than Low
+    #             if pred_values[step, close_idx] < pred_values[step, low_idx]:
+    #                 pred_values[step, close_idx] = pred_values[step, low_idx]
+    #             if backtest_values[step, close_idx] < backtest_values[step, low_idx]:
+    #                 backtest_values[step, close_idx] = backtest_values[step, low_idx]
+            
+    #         # Error correction feedback loop
+    #         # If we have actual data for comparison (e.g., for backtest)
+    #         # and we're past the first few steps, update the correction factors
+    #         if step > 0 and step % 5 == 0:  # Update every 5 steps
+    #             for predictor in predictors:
+    #                 pred_idx = predictor_to_idx[predictor]
+                    
+    #                 # Compare predicted vs actual for previous steps where actual data is available
+    #                 available_history = min(step, 5)  # Use up to 5 previous points
+                    
+    #                 # For backtest, we can compare with actual historical data
+    #                 if step < len(backtest):
+    #                     actual_values = backtest[predictor].values[-available_history:]
+    #                     predicted_values = backtest_values[step-available_history:step, pred_idx]
+                        
+    #                     # Calculate ratio of actual to predicted (as correction factor)
+    #                     if np.all(predicted_values != 0):
+    #                         ratio = np.mean(actual_values / predicted_values)
+    #                         # Limit correction factor to reasonable range
+    #                         ratio = max(0.85, min(1.15, ratio))
+    #                         # Smooth the correction factor update
+    #                         error_correction[predictor] = 0.75 * error_correction[predictor] + 0.25 * ratio
+
+    #     # Convert predictions to DataFrames
+    #     prediction_result = pd.DataFrame(
+    #         pred_values,
+    #         columns=predictors,
+    #         index=pred_dates
+    #     )
+        
+    #     backtest_result = pd.DataFrame(
+    #         backtest_values,
+    #         columns=predictors,
+    #         index=backtest_dates
+    #     )
+        
+    #     # Include the original data
+    #     prediction = pd.concat([prediction, prediction_result])
+    #     backtest = pd.concat([backtest, backtest_result])
+        
+    #     return prediction, backtest
+
+
+
+
+
+
+
+
+
+
+
+
+  
+    # # DS Code
+    # def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
+    #     """Maintains original interface but uses loop for predictions"""
+    #     # Initialize containers as per original structure
+    #     prediction = self.data[predictors].iloc[-horizon:].copy()
+    #     backtest = self.data[predictors].iloc[:-horizon].copy()
+    #     observation = self.data[predictors].copy().dropna()
+        
+    #     # Maintain original date handling
+    #     last_real_date = self.data.index[-1]
+    #     dates = []
+    #     current_date = last_real_date
+        
+    #     # For-loop prediction core
+    #     forecast_values = []
+    #     for _ in range(horizon):
+    #         # Get next valid business day
+    #         current_date = get_next_valid_date(current_date + timedelta(days=1))
+    #         dates.append(current_date)
+            
+    #         # Prepare input with time feature
+    #         input_data = self.data[predictors].drop(columns='Close').iloc[_].values.reshape(1, -1)
+    #         # np.hstack([
+    #         #     self.data[predictors].iloc[-1].values,
+    #         #     [len(forecast_values) + 1]  # Time step feature
+    #         # ]).reshape(1, -1)
+            
+    #         # Single-step prediction
+    #         try:
+    #             pred = self.models[predictors[0]][model_type].predict(input_data)[0]
+    #         except:
+    #             pred = self.data[predictors[0]].iloc[-1]
+            
+    #         forecast_values.append(pred)
+            
+    #         # Update data with prediction (for recursive models)
+    #         self.data.loc[current_date] = {**self.data.iloc[-1].to_dict(), 
+    #                                     predictors[0]: pred}
+
+    #     # Build prediction DataFrame (preserve original format)
+    #     prediction = pd.DataFrame(
+    #         np.array(forecast_values).reshape(-1, 1),
+    #         index=dates,
+    #         columns=[predictors[0]]
+    #     )
+        
+    #     # Backtest loop (original structure)
+    #     backtest_preds = []
+    #     for i in range(len(backtest), len(backtest)+horizon):
+    #         if i >= len(self.data): break
+    #         # input_data = np.hstack([
+    #         #     self.data[predictors].iloc[i].values,
+    #         #     [i - len(backtest) + 1]
+    #         # ]).reshape(1, -1)
+    #         input_data = self.data[predictors].drop(columns='Close').iloc[i].values.reshape(1, -1)
+    #         backtest_preds.append(self.models[predictors[0]][model_type].predict(input_data)[0])
+        
+    #     # Maintain original backtest format
+    #     backtest = backtest.combine_first(
+    #         pd.DataFrame(
+    #             np.array(backtest_preds).reshape(-1, 1),
+    #             index=self.data.index[-horizon:],
+    #             columns=[predictors[0]]
+    #         )
+    #     )
+        
+    #     # Original error correction logic
+    #     if len(self.history) >= 5:
+    #         recent_errors = [
+    #             observation[predictors[0]].iloc[-i-1] - self.history[-i-1]
+    #             for i in range(1, 6)
+    #         ]
+    #         error_bias = np.mean(recent_errors)
+    #         prediction.iloc[:, 0] += error_bias * 0.3
+    #         backtest.iloc[-horizon:] += error_bias * 0.3
+        
+    #     self.history.extend(prediction[predictors[0]].values)
+        
+    #     return prediction, backtest
+
+
+
+    # # Original Code
+    # def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
+    #     """
+    #     Perform one-step forward predictions for all predictors.
+
+    #     Parameters:
+    #     -----------
+    #     predictors : List[str]
+    #         List of predictor column names
+    #     model_type : str
+    #         one of the
+    #     horizon : int, optional
+    #         Number of days to forecast (default: 20)
+
+    #     Returns:
+    #     --------
+    #     Tuple[pd.DataFrame, pd.DataFrame]z
+    #         Forecasted data and backtest data
+    #     """
+    #     # Ensure models are prepared
+    #     if not self.models:
+    #         raise ValueError("Please run prepare_models() first")
+
+    #     # Initialize prediction and backtest DataFrames
+    #     prediction = self.data[predictors].copy().iloc[-horizon:,].dropna()
+    #     backtest = self.data[predictors].copy().iloc[:-horizon,].dropna()
+    #     observation = self.data[predictors].copy().dropna()
         
 
-        # last_row = prediction.iloc[-1]
-        # last_row1 = backtest.iloc[-1]
+    #     # last_row = prediction.iloc[-1]
+    #     # last_row1 = backtest.iloc[-1]
 
-        # Dictionaries to store predictions for each predictor and model
-        predictions = {
-            predictor: {
-                model: []
-                for model in ["ridge", "linear", "polynomial", "arimaxgb", "combined"]
-            }
-            for predictor in predictors
-        }
+    #     # Dictionaries to store predictions for each predictor and model
+    #     predictions = {
+    #         predictor: {
+    #             model: []
+    #             for model in ["ridge", "linear", "polynomial", "arimaxgb", "combined"]
+    #         }
+    #         for predictor in predictors
+    #     }
 
-        for _ in range(horizon):
-            # Predict each predictor using different models
-            last_row = prediction.iloc[-horizon:,]
-            last_row1 = backtest.iloc[-horizon:,]
+    #     for _ in range(horizon):
+    #         # Predict each predictor using different models
+    #         last_row = prediction.iloc[-horizon:,]
+    #         last_row1 = backtest.iloc[-horizon:,]
 
-            for predictor in predictors:
-                # Select features excluding the current predictor
-                features = [col for col in predictors if col != predictor]
+    #         for predictor in predictors:
+    #             # Select features excluding the current predictor
+    #             features = [col for col in predictors if col != predictor]
 
-                # Predictions using different models
-                models = self.models[predictor]
-                scaler = self.scalers[predictor]
-                transformer = self.transformers[predictor]
+    #             # Predictions using different models
+    #             models = self.models[predictor]
+    #             scaler = self.scalers[predictor]
+    #             transformer = self.transformers[predictor]
 
-                # Calculate rolling averages for MA_50 and MA_200 based on the Close price
-                if predictor == "MA_50":
-                    rolling_avg_50 = (
-                        pd.Series(
-                            np.concatenate(
-                                (
-                                    observation["Close"],
-                                    predictions["Close"]["arimaxgb"][-2],
-                                )
-                            )
-                        )
-                        .rolling(window=50)
-                        .mean()
-                        .iloc[-1]
-                    )
-                    predictions[predictor]["arimaxgb"].append(rolling_avg_50)
+    #             # Calculate rolling averages for MA_50 and MA_200 based on the Close price
+    #             if predictor == "MA_50":
+    #                 rolling_avg_50 = (
+    #                     pd.Series(
+    #                         np.concatenate(
+    #                             (
+    #                                 observation["Close"],
+    #                                 predictions["Close"]["arimaxgb"][-2],
+    #                             )
+    #                         )
+    #                     )
+    #                     .rolling(window=50)
+    #                     .mean()
+    #                     .iloc[-1]
+    #                 )
+    #                 predictions[predictor]["arimaxgb"].append(rolling_avg_50)
 
-                    rolling_avg_50_1 = (
-                        pd.Series(
-                            np.concatenate(
-                                (
-                                    backtest["Close"],
-                                    predictions["Close"]["arimaxgb"][-1],
-                                )
-                            )
-                        )
-                        .rolling(window=50)
-                        .mean()
-                        .iloc[-1]
-                    )
-                    predictions[predictor]["arimaxgb"].append(rolling_avg_50_1)
-                elif predictor == "MA_200":
-                    rolling_avg_200 = (
-                        pd.Series(
-                            np.concatenate(
-                                (
-                                    observation["Close"],
-                                    predictions["Close"]["arimaxgb"][-2],
-                                )
-                            )
-                        )
-                        .rolling(window=200)
-                        .mean()
-                        .iloc[-1]
-                    )
-                    predictions[predictor]["arimaxgb"].append(rolling_avg_200)
+    #                 rolling_avg_50_1 = (
+    #                     pd.Series(
+    #                         np.concatenate(
+    #                             (
+    #                                 backtest["Close"],
+    #                                 predictions["Close"]["arimaxgb"][-1],
+    #                             )
+    #                         )
+    #                     )
+    #                     .rolling(window=50)
+    #                     .mean()
+    #                     .iloc[-1]
+    #                 )
+    #                 predictions[predictor]["arimaxgb"].append(rolling_avg_50_1)
+    #             elif predictor == "MA_200":
+    #                 rolling_avg_200 = (
+    #                     pd.Series(
+    #                         np.concatenate(
+    #                             (
+    #                                 observation["Close"],
+    #                                 predictions["Close"]["arimaxgb"][-2],
+    #                             )
+    #                         )
+    #                     )
+    #                     .rolling(window=200)
+    #                     .mean()
+    #                     .iloc[-1]
+    #                 )
+    #                 predictions[predictor]["arimaxgb"].append(rolling_avg_200)
 
-                    rolling_avg_200_1 = (
-                        pd.Series(
-                            np.concatenate(
-                                (
-                                    backtest["Close"],
-                                    predictions["Close"]["arimaxgb"][-1],
-                                )
-                            )
-                        )
-                        .rolling(window=200)
-                        .mean()
-                        .iloc[-1]
-                    )
-                    predictions[predictor]["arimaxgb"].append(rolling_avg_200_1)
+    #                 rolling_avg_200_1 = (
+    #                     pd.Series(
+    #                         np.concatenate(
+    #                             (
+    #                                 backtest["Close"],
+    #                                 predictions["Close"]["arimaxgb"][-1],
+    #                             )
+    #                         )
+    #                     )
+    #                     .rolling(window=200)
+    #                     .mean()
+    #                     .iloc[-1]
+    #                 )
+    #                 predictions[predictor]["arimaxgb"].append(rolling_avg_200_1)
 
-                else:
+    #             else:
 
-                    average_row = np.average(
-                        last_row[features],
-                        axis=0,
-                        weights=[0.1 * i for i in range(1, len(last_row) + 1)],
-                    )
-                    average_row1 = np.average(
-                        last_row1[features],
-                        axis=0,
-                        weights=[0.1 * i for i in range(1, len(last_row1) + 1)],
-                    )
+    #                 average_row = np.average(
+    #                     last_row[features],
+    #                     axis=0,
+    #                     weights=[0.1 * i for i in range(1, len(last_row) + 1)],
+    #                 )
+    #                 average_row1 = np.average(
+    #                     last_row1[features],
+    #                     axis=0,
+    #                     weights=[0.1 * i for i in range(1, len(last_row1) + 1)],
+    #                 )
 
-                    # Prepare input data
-                    input_data = average_row
-                    input_data1 = average_row1
+    #                 # Prepare input data
+    #                 input_data = average_row
+    #                 input_data1 = average_row1
 
-                    # Make predictions
+    #                 # Make predictions
 
-                    pred_arima_ml = models["arimaxgb"].predict(
-                        input_data.reshape(1, -1)
-                    )
-                    # pred_arima_ml = models["arimaxgb"].predict(input_data.values.reshape(1, -1))
-                    # pred_arima_ml = models["arimaxgb"].predict(input_data)
+    #                 pred_arima_ml = models["arimaxgb"].predict(
+    #                     input_data.reshape(1, -1)
+    #                 )
+    #                 # pred_arima_ml = models["arimaxgb"].predict(input_data.values.reshape(1, -1))
+    #                 # pred_arima_ml = models["arimaxgb"].predict(input_data)
 
-                    # pred_ridge = models['ridge'].predict(scaler.transform(input_data.values.reshape(1, -1)))[0]
-                    # pred_linear = models['linear'].predict(input_data.values.reshape(1, -1))[0]
-                    # pred_poly = models['polynomial'].predict(
-                    #     transformer.transform(scaler.transform(input_data.values.reshape(1, -1)))
-                    # )[0]
-                    # if predictor not in ['Daily Returns', 'Volatility']:
-                    #     pred_combined = models["arimaxgb"].predict(input_data.values.reshape(1, -1))
-                    # else:
-                    #     pred_combined =  models['linear'].predict(input_data.values.reshape(1, -1))[0]
+    #                 # pred_ridge = models['ridge'].predict(scaler.transform(input_data.values.reshape(1, -1)))[0]
+    #                 # pred_linear = models['linear'].predict(input_data.values.reshape(1, -1))[0]
+    #                 # pred_poly = models['polynomial'].predict(
+    #                 #     transformer.transform(scaler.transform(input_data.values.reshape(1, -1)))
+    #                 # )[0]
+    #                 # if predictor not in ['Daily Returns', 'Volatility']:
+    #                 #     pred_combined = models["arimaxgb"].predict(input_data.values.reshape(1, -1))
+    #                 # else:
+    #                 #     pred_combined =  models['linear'].predict(input_data.values.reshape(1, -1))[0]
 
-                    pred_arima_ml1 = models["arimaxgb"].predict(
-                        input_data1.reshape(1, -1)
-                    )
-                    # pred_arima_ml1 = models["arimaxgb"].predict(input_data1.values.reshape(1, -1))
-                    # pred_arima_ml1 = models["arimaxgb"].predict(input_data1)
+    #                 pred_arima_ml1 = models["arimaxgb"].predict(
+    #                     input_data1.reshape(1, -1)
+    #                 )
+    #                 # pred_arima_ml1 = models["arimaxgb"].predict(input_data1.values.reshape(1, -1))
+    #                 # pred_arima_ml1 = models["arimaxgb"].predict(input_data1)
 
-                    # pred_ridge1 = models['ridge'].predict(scaler.transform(input_data1.values.reshape(1, -1)))[0]
-                    # pred_linear1 = models['linear'].predict(input_data1.values.reshape(1, -1))[0]
-                    # pred_poly1 = models['polynomial'].predict(
-                    #     transformer.transform(scaler.transform(input_data1.values.reshape(1, -1)))
-                    # )[0]
-                    # if predictor not in ['Daily Returns', 'Volatility']:
-                    #     pred_combined1 = models["arimaxgb"].predict(input_data1.values.reshape(1, -1))
-                    # else:
-                    #     pred_combined1 =  models['linear'].predict(input_data1.values.reshape(1, -1))[0]
+    #                 # pred_ridge1 = models['ridge'].predict(scaler.transform(input_data1.values.reshape(1, -1)))[0]
+    #                 # pred_linear1 = models['linear'].predict(input_data1.values.reshape(1, -1))[0]
+    #                 # pred_poly1 = models['polynomial'].predict(
+    #                 #     transformer.transform(scaler.transform(input_data1.values.reshape(1, -1)))
+    #                 # )[0]
+    #                 # if predictor not in ['Daily Returns', 'Volatility']:
+    #                 #     pred_combined1 = models["arimaxgb"].predict(input_data1.values.reshape(1, -1))
+    #                 # else:
+    #                 #     pred_combined1 =  models['linear'].predict(input_data1.values.reshape(1, -1))[0]
 
-                    # Store predictions
-                    # predictions[predictor]['ridge'].append(pred_ridge)
-                    # predictions[predictor]['linear'].append(pred_linear)
-                    # predictions[predictor]['polynomial'].append(pred_poly)
-                    predictions[predictor]["arimaxgb"].append(pred_arima_ml)
-                    # predictions[predictor]['combined'].append(pred_combined)
+    #                 # Store predictions
+    #                 # predictions[predictor]['ridge'].append(pred_ridge)
+    #                 # predictions[predictor]['linear'].append(pred_linear)
+    #                 # predictions[predictor]['polynomial'].append(pred_poly)
+    #                 predictions[predictor]["arimaxgb"].append(pred_arima_ml)
+    #                 # predictions[predictor]['combined'].append(pred_combined)
 
-                    # predictions[predictor]['ridge'].append(pred_ridge1)
-                    # predictions[predictor]['linear'].append(pred_linear1)
-                    # predictions[predictor]['polynomial'].append(pred_poly1)
-                    predictions[predictor]["arimaxgb"].append(pred_arima_ml1)
-                # predictions[predictor]['combined'].append(pred_combined1)
+    #                 # predictions[predictor]['ridge'].append(pred_ridge1)
+    #                 # predictions[predictor]['linear'].append(pred_linear1)
+    #                 # predictions[predictor]['polynomial'].append(pred_poly1)
+    #                 predictions[predictor]["arimaxgb"].append(pred_arima_ml1)
+    #             # predictions[predictor]['combined'].append(pred_combined1)
 
-            # Create new row with predictions
-            next_day_date = get_next_valid_date(pd.Timestamp(last_row.iloc[-1].name))
-            next_day_date1 = get_next_valid_date(pd.Timestamp(last_row1.iloc[-1].name))
-            if "Low" in predictors:
-                if predictor == "Close":
-                    if (
-                        predictions["Close"][model_type][-2]
-                        > predictions["Low"][model_type][-2]
-                    ):
-                        predictions["Close"][model_type][-2] = predictions["Low"][
-                            model_type
-                        ][-2]
-                    elif (
-                        predictions["Close"][model_type][-1]
-                        > predictions["Low"][model_type][-1]
-                    ):
-                        predictions["Close"][model_type][-1] = predictions["Low"][
-                            model_type
-                        ][-1]
+    #         # Create new row with predictions
+    #         next_day_date = get_next_valid_date(pd.Timestamp(last_row.iloc[-1].name))
+    #         next_day_date1 = get_next_valid_date(pd.Timestamp(last_row1.iloc[-1].name))
+    #         if "Low" in predictors:
+    #             if predictor == "Close":
+    #                 if (
+    #                     predictions["Close"][model_type][-2]
+    #                     > predictions["Low"][model_type][-2]
+    #                 ):
+    #                     predictions["Close"][model_type][-2] = predictions["Low"][
+    #                         model_type
+    #                     ][-2]
+    #                 elif (
+    #                     predictions["Close"][model_type][-1]
+    #                     > predictions["Low"][model_type][-1]
+    #                 ):
+    #                     predictions["Close"][model_type][-1] = predictions["Low"][
+    #                         model_type
+    #                     ][-1]
 
-            new_row = pd.DataFrame(
-                {
-                    predictor: predictions[predictor][model_type][-2]
-                    for predictor in predictors
-                },  # take the last one
-                index=[next_day_date],
-            )
-            new_row1 = pd.DataFrame(
-                {
-                    predictor: predictions[predictor][model_type][-1]
-                    for predictor in predictors
-                },  # take the last one
-                index=[next_day_date1],
-            )
+    #         new_row = pd.DataFrame(
+    #             {
+    #                 predictor: predictions[predictor][model_type][-2]
+    #                 for predictor in predictors
+    #             },  # take the last one
+    #             index=[next_day_date],
+    #         )
+    #         new_row1 = pd.DataFrame(
+    #             {
+    #                 predictor: predictions[predictor][model_type][-1]
+    #                 for predictor in predictors
+    #             },  # take the last one
+    #             index=[next_day_date1],
+    #         )
 
-            # Update DataFrames
-            prediction = pd.concat([prediction, new_row])
-            observation = pd.concat([observation, new_row])
-            last_row = prediction.iloc[-1]
-            # last_row = prediction.iloc[-5:,]
-            backtest = pd.concat([backtest, new_row1])
-            last_row1 = backtest.iloc[-1]
+    #         # Update DataFrames
+    #         prediction = pd.concat([prediction, new_row])
+    #         observation = pd.concat([observation, new_row])
+    #         last_row = prediction.iloc[-1]
+    #         # last_row = prediction.iloc[-5:,]
+    #         backtest = pd.concat([backtest, new_row1])
+    #         last_row1 = backtest.iloc[-1]
 
-            # last_row1 = backtest.iloc[-5:,]
+    #         # last_row1 = backtest.iloc[-5:,]
 
-        return prediction, backtest
+    #     return prediction, backtest
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     # def plot_ridge_alpha_analysis(self, X_train_scaled, y_train, X_test_scaled, y_test):
     #     """Plot Ridge regression alpha vs RMSE analysis"""
@@ -1133,7 +2086,7 @@ class StockPredictor:
                     predictors, horizon=horizon, weight=weight
                 )
                 # prediction_dataset._evaluate_models('Close')
-                prediction, backtest = (
+                prediction, backtest, raw_backtest = (
                     predictor.one_step_forward_forecast(
                         predictors, model_type="arimaxgb", horizon=horizon
                     )
@@ -1145,8 +2098,8 @@ class StockPredictor:
                 backtest_mape = mean_absolute_percentage_error(prediction_dataset.data.Close[prediction_dataset.data.index >= first_day], backtest[backtest.index >= first_day].Close)
                 print('MSE of backtest period vs real data',backtest_mape)
                 print('Horizon: ',horizon)
-                print('-----------------------------------')
-                if backtest_mape > 0.20:
+                print('-----------------------------------------------------------------------------------------------------------')
+                if backtest_mape > 0.30:
                     continue
 
                 # Data Viz (Not that key)
@@ -1169,6 +2122,12 @@ class StockPredictor:
                     backtest[backtest.index >= first_day].Close,
                     label="Backtest",
                     color="red",
+                )
+                plt.plot(
+                    raw_backtest[raw_backtest.index >= first_day].index,
+                    raw_backtest[raw_backtest.index >= first_day].Close,
+                    label="Raw Backtest",
+                    color="orange",
                 )
                 plt.plot(
                     prediction_dataset.data.Close[

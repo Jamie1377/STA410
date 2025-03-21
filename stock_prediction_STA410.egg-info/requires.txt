@@ -10,4 +10,6 @@ matplotlib
 pandas-market-calendars
 pandas_market_calendars
 mplcursors
-scikit-optimizehmmlearn
+scikit-optimize
+hmmlearn
+pmdarima

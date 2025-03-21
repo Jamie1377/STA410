@@ -1,21 +1,22 @@
 from stock_prediction.core import StockPredictor
 from datetime import date
 import time
-
+import pandas as pd
+import numpy as np
 stock_settings = {
     "V": {"horizons": [10], "weight": False},
     "GE": {"horizons": [5], "weight": False},
     "ANF": {"horizons": [7, 10], "weight": False},
     "AVGO": {"horizons": [7, 5, 10, 12], "weight": False},
-    "AXP": {"horizons": [5], "weight": False},
-    "NVDA": {"horizons": [10], "weight": False},
-    "MCO": {"horizons": [1], "weight": False},
+    "AXP": {"horizons": [5, 10], "weight": False},
+    "NVDA": {"horizons": [3, 5, 10, 15], "weight": False},
+    "MCO": {"horizons": [3], "weight": False},
     "PYPL": {"horizons": [5], "weight": False},
     "SPGI": {"horizons": [7], "weight": True},
-    "AAPL": {"horizons": [3], "weight": True},
+    "AAPL": {"horizons": [3, 5, 7, 10], "weight": True},
     "ORCL": {"horizons": [3, 7], "weight": False},
     "LCID": {"horizons": [7], "weight": False},
-    "CRWD": {"horizons": [7, 12], "weight": False},
+    "c": {"horizons": [5, 7, 12], "weight": False},
     "KDP": {"horizons": [3, 5, 12], "weight": False},
     "SBUX": {"horizons": [4, 5, 7], "weight": False},
     "ZS": {"horizons": [4, 5], "weight": False},
@@ -121,7 +122,62 @@ stock_settings = {
 #             plt.show()
 
 toc = time.time()
-StockPredictor.full_workflow("2024-01-01", date.today(), companies=['NVDA'])
+StockPredictor.full_workflow("2024-01-01", date.today(), companies=['NVDA'],stock_settings=stock_settings)
 tic = time.time()
 tic-toc
 print('Time taken', tic-toc)
+
+# AAPL 10
+  
+# prediction_dataset = StockPredictor(
+#                 "NVDA",
+#                 start_date="2024-01-01",
+#                 end_date= date.today(),
+#                 interval="1d",)
+# prediction_dataset.load_data()
+# predictor = prediction_dataset
+# for horizon in [5]:
+#     prediction_dataset.prepare_models(predictors= [
+#                     "Close",
+#                     "MA_50",
+#                     "MA_200",
+#                     "SP500",
+#                     "TNX",
+#                     "USDCAD=X",
+#                     "Tech",
+#                     "Fin",
+#                     "VIX",
+#                 ] + [
+#                     "rolling_min",
+#                     "rolling_median",
+#                     "rolling_sum",
+#                     "rolling_ema",
+#                     "rolling_25p",
+#                     "rolling_75p",
+#                 ], horizon=horizon, weight=False)
+# prediction, backtest = (predictor.one_step_forward_forecast(
+#                         [
+#                     "Close",
+#                     "MA_50",
+#                     "MA_200",
+#                     "SP500",
+#                     "TNX",
+#                     "USDCAD=X",
+#                     "Tech",
+#                     "Fin",
+#                     "VIX",
+#                 ] + [
+#                     "rolling_min",
+#                     "rolling_median",
+#                     "rolling_sum",
+#                     "rolling_ema",
+#                     "rolling_25p",
+#                     "rolling_75p",
+#                 ], model_type="arimaxgb", horizon=horizon
+#                     )
+#                 )
+# print(prediction)
+# print(backtest)
+
+# print(prediction_dataset.data.head())
+# print(prediction_dataset.data.iloc[-10:,].mean(axis=0))

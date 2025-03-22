@@ -12,13 +12,13 @@ stock_settings = {
     "NVDA": {"horizons": [3, 5, 10, 15], "weight": False},
     "MCO": {"horizons": [3], "weight": False},
     "PYPL": {"horizons": [5], "weight": False},
-    "SPGI": {"horizons": [7], "weight": True},
-    "AAPL": {"horizons": [3, 5, 7, 10], "weight": True},
+    "SPGI": {"horizons": [12], "weight": False},
+    "AAPL": {"horizons": [3, 5, 7, 10], "weight": False},
     "ORCL": {"horizons": [3, 7], "weight": False},
-    "LCID": {"horizons": [7], "weight": False},
+    "LCID": {"horizons": [5, 10, 15], "weight": False},
     "c": {"horizons": [5, 7, 12], "weight": False},
     "KDP": {"horizons": [3, 5, 12], "weight": False},
-    "SBUX": {"horizons": [4, 5, 7], "weight": False},
+    "SBUX": {"horizons": [5, 10, 15], "weight": False},
     "ZS": {"horizons": [4, 5], "weight": False},
     "MET": {"horizons": [5], "weight": False},
     "EBAY": {"horizons": [10], "weight": False},
@@ -122,7 +122,7 @@ stock_settings = {
 #             plt.show()
 
 toc = time.time()
-StockPredictor.full_workflow("2024-01-01", date.today(), companies=['NVDA'],stock_settings=stock_settings)
+StockPredictor.full_workflow("2023-09-01", date.today(), companies=["SBUX", "LCID"],stock_settings=stock_settings)
 tic = time.time()
 tic-toc
 print('Time taken', tic-toc)
@@ -130,7 +130,7 @@ print('Time taken', tic-toc)
 # AAPL 10
   
 # prediction_dataset = StockPredictor(
-#                 "NVDA",
+#                 "SPGI",
 #                 start_date="2024-01-01",
 #                 end_date= date.today(),
 #                 interval="1d",)
@@ -155,7 +155,7 @@ print('Time taken', tic-toc)
 #                     "rolling_25p",
 #                     "rolling_75p",
 #                 ], horizon=horizon, weight=False)
-# prediction, backtest = (predictor.one_step_forward_forecast(
+# prediction, backtest, backtest2 = (predictor.one_step_forward_forecast(
 #                         [
 #                     "Close",
 #                     "MA_50",

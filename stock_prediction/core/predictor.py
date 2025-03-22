@@ -826,11 +826,11 @@ class StockPredictor:
         bounds = {}
         for p in predictors:
             if p in price_vars:
-                bounds[p] = (0.975, 1.025)  # Tighter bounds for prices
+                bounds[p] = (0.97, 1.03)  # Tighter bounds for prices
             elif p.startswith("MA_"):
-                bounds[p] = (0.975, 1.025)  # Even tighter for moving averages
+                bounds[p] = (0.97, 1.03)  # Even tighter for moving averages
             else:
-                bounds[p] = (0.5, 1.5)  # Wider for other indicators
+                bounds[p] = (0.8, 1.2)  # Wider for other indicators
         
         # 3. Initialize regime detection
         regime = "normal"  # Default regime
@@ -970,10 +970,15 @@ class StockPredictor:
         for step in range(horizon):
             # Get last known dates
             if step == 0:
-                last_pred_row = prediction.iloc[-1]
-                last_backtest_row = backtest.iloc[-1]
-                last_pred_date = last_pred_row.name
-                last_backtest_date = last_backtest_row.name
+                # last_pred_row = prediction.iloc[-1]
+                # last_backtest_row = backtest.iloc[-1]
+                # last_pred_date = last_pred_row.name
+                # last_backtest_date = last_backtest_row.name
+
+                last_pred_row = prediction.iloc[-horizon:].mean(axis=0) if len(prediction) >= horizon else prediction.iloc[-1]
+                last_backtest_row = backtest.iloc[-horizon:].mean(axis=0) if len(backtest) >= horizon else backtest.iloc[-1]
+                last_pred_date = prediction.iloc[-1].name
+                last_backtest_date = backtest.iloc[-1].name
 
                 # last_pred_row = prediction.iloc[-horizon:,].mean( axis=0)
                 # last_backtest_row = backtest.iloc[-horizon:,].mean(axis=0)
@@ -989,16 +994,16 @@ class StockPredictor:
             backtest_dates.append(next_backtest_date)
             
             # # Step 1: Update market regime if we have Close
-            # if "Close" in predictors and step > 0:
-            #     # Get recent close values
-            #     close_idx = predictor_indices["Close"]
-            #     if step >1:
-            #         recent_close_vals = pred_array[:step, close_idx]
-            #         regime = update_regime(recent_close_vals, None)
+            if "Close" in predictors and step > 0:
+                # Get recent close values
+                close_idx = predictor_indices["Close"]
+                if step >1:
+                    recent_close_vals = pred_array[:step, close_idx]
+                    regime = update_regime(recent_close_vals, None)
                     
-            #         # Also track price changes for trending analysis
-            #         if step > 1:
-            #             price_changes.append(pred_array[step-1, close_idx] - pred_array[step-2, close_idx])
+                    # Also track price changes for trending analysis
+                    if step > 1:
+                        price_changes.append(pred_array[step-1, close_idx] - pred_array[step-2, close_idx])
             
             # Step 2: First handle Close price prediction (which others depend on)
             if "Close" in predictors:
@@ -1007,24 +1012,100 @@ class StockPredictor:
                 
                 # Prepare input data - use last available information
                 if step == 0:
-                    pred_input = last_pred_row[close_features].values
-                    backtest_input = last_backtest_row[close_features].values
-                    raw_backtest_input = last_backtest_row[close_features].values
+                    # pred_input = last_pred_row[close_features].values
+                    # backtest_input = last_backtest_row[close_features].values
+                    # raw_backtest_input = last_backtest_row[close_features].values
+
+                    # Use averaged input from last 'horizon' rows
+                    if len(prediction) >= horizon:
+                        pred_input = prediction[close_features].iloc[-horizon:].mean(axis=0).values
+                    else:
+                        pred_input = last_pred_row[close_features].values
+                        
+                    if len(backtest) >= horizon:
+                        backtest_input = backtest[close_features].iloc[-horizon:].mean(axis=0).values
+                        raw_backtest_input = backtest[close_features].iloc[-horizon:].mean(axis=0).values
+                    else:
+                        backtest_input = last_backtest_row[close_features].values
+                        raw_backtest_input = last_backtest_row[close_features].values
+                # else:
+                    # # Construct from previous predictions
+                    # pred_input = np.array([
+                    #     pred_array[step-1, predictor_indices[feat]] 
+                    #     for feat in close_features
+                    # ])
+                    # backtest_input = np.array([
+                    #     backtest_array[step-1, predictor_indices[feat]]
+                    #     for feat in close_features
+                    # ])
+                    # raw_backtest_input = np.array([
+                    #     raw_backtest_array[step-1, predictor_indices[feat]]
+                    #     for feat in close_features
+                    # ])
                 else:
-                    # Construct from previous predictions
-                    pred_input = np.array([
-                        pred_array[step-1, predictor_indices[feat]] 
-                        for feat in close_features
-                    ])
-                    backtest_input = np.array([
-                        backtest_array[step-1, predictor_indices[feat]]
-                        for feat in close_features
-                    ])
-                    raw_backtest_input = np.array([
-                        raw_backtest_array[step-1, predictor_indices[feat]]
-                        for feat in close_features
-                    ])
+                    # For subsequent steps, if we have enough predicted values, use their average
+                    if step >= horizon:
+                        # Use average of last 'horizon' predictions
+                        pred_input = np.array([
+                            np.mean(pred_array[max(0, step-horizon):step, predictor_indices[feat]])
+                            for feat in close_features
+                        ])
+                        backtest_input = np.array([
+                            np.mean(backtest_array[max(0, step-horizon):step, predictor_indices[feat]])
+                            for feat in close_features
+                        ])
+                        raw_backtest_input = np.array([
+                            np.mean(raw_backtest_array[max(0, step-horizon):step, predictor_indices[feat]])
+                            for feat in close_features
+                        ])
+                    else:
+                        # If we don't have enough predictions yet, combine historical and predicted
+                        pred_inputs = []
+                        backtest_inputs = []
+                        raw_backtest_inputs = []
+                        
+                        for feat in close_features:
+                            feat_idx = predictor_indices[feat]
+                            
+                            # Get predicted values so far
+                            pred_vals = pred_array[:step, feat_idx] if step > 0 else np.array([])
+                            backtest_vals = backtest_array[:step, feat_idx] if step > 0 else np.array([])
+                            raw_backtest_vals = raw_backtest_array[:step, feat_idx] if step > 0 else np.array([])
+                            
+                            # Calculate how many historical values we need
+                            hist_needed = horizon - len(pred_vals)
+                            
+                            if hist_needed > 0:
+                                # Combine historical and predicted values
+                                if feat in prediction.columns:
+                                    pred_hist = prediction[feat].iloc[-hist_needed:].values
+                                    all_pred_vals = np.concatenate([pred_hist, pred_vals])
+                                    pred_inputs.append(np.mean(all_pred_vals))
+                                else:
+                                    pred_inputs.append(0)  # Fallback
+                                    
+                                if feat in backtest.columns:
+                                    backtest_hist = backtest[feat].iloc[-hist_needed:].values
+                                    all_backtest_vals = np.concatenate([backtest_hist, backtest_vals])
+                                    backtest_inputs.append(np.mean(all_backtest_vals))
+                                    
+                                    raw_backtest_hist = backtest[feat].iloc[-hist_needed:].values
+                                    all_raw_backtest_vals = np.concatenate([raw_backtest_hist, raw_backtest_vals])
+                                    raw_backtest_inputs.append(np.mean(all_raw_backtest_vals))
+                                else:
+                                    backtest_inputs.append(0)  # Fallback
+                                    raw_backtest_inputs.append(0)  # Fallback
+                            else:
+                                # We have enough predicted values already
+                                pred_inputs.append(np.mean(pred_vals[-horizon:]))
+                                backtest_inputs.append(np.mean(backtest_vals[-horizon:]))
+                                raw_backtest_inputs.append(np.mean(raw_backtest_vals[-horizon:]))
+                        
+                        pred_input = np.array(pred_inputs)
+                        backtest_input = np.array(backtest_inputs)
+                        raw_backtest_input = np.array(raw_backtest_inputs)
                 
+                        
                 # Apply model for Close price
                 close_model = self.models["Close"][model_type]
                 
@@ -1047,6 +1128,10 @@ class StockPredictor:
                 pred_close = ensemble_pred * close_correction
                 backtest_close = ensemble_backtest * close_correction
                 
+                # test if first prediction is way off
+                if step == 0 and  abs(1 - backtest_close / self.data.copy().iloc[-horizon]['Close']) >= 0.075:
+                    pred_close =  0.5*(self.data.copy().iloc[-1]['Close'] + pred_close )
+                    backtest_close = 0.5*(self.data.copy().iloc[-horizon]['Close']  + backtest_close)
                 # Store predictions
                 pred_array[step, close_idx] = pred_close
                 backtest_array[step, close_idx] = backtest_close
@@ -1211,58 +1296,135 @@ class StockPredictor:
                     backtest_array[step, pred_idx] = current_volatility
                     raw_backtest_array[step, pred_idx] = current_volatility
                     
+                # else:
+                #     # Regular predictor - use model
+                #     features = [col for col in predictors if col != predictor]
+                    
+                #     # Prepare input data
+                #     if step == 0:
+                #         pred_input = last_pred_row[features].values
+                #         backtest_input = last_backtest_row[features].values
+                #     else:
+                #         # Use previous predictions as features
+                #         pred_input = np.array([
+                #             pred_array[step-1, predictor_indices[feat]] 
+                #             for feat in features
+                #         ])
+                #         backtest_input = np.array([
+                #             backtest_array[step-1, predictor_indices[feat]]
+                #             for feat in features
+                #         ])
+                # For other predictors (non-MA, non-derived)
                 else:
                     # Regular predictor - use model
                     features = [col for col in predictors if col != predictor]
                     
-                    # Prepare input data
+                    # Prepare input data using moving average approach
                     if step == 0:
-                        pred_input = last_pred_row[features].values
-                        backtest_input = last_backtest_row[features].values
+                        # Use averaged input from last 'horizon' rows
+                        if len(prediction) >= horizon:
+                            pred_input = prediction[features].iloc[-horizon:].mean(axis=0).values
+                        else:
+                            pred_input = last_pred_row[features].values
+                            
+                        if len(backtest) >= horizon:
+                            backtest_input = backtest[features].iloc[-horizon:].mean(axis=0).values
+                        else:
+                            backtest_input = last_backtest_row[features].values
                     else:
-                        # Use previous predictions as features
-                        pred_input = np.array([
-                            pred_array[step-1, predictor_indices[feat]] 
-                            for feat in features
-                        ])
-                        backtest_input = np.array([
-                            backtest_array[step-1, predictor_indices[feat]]
-                            for feat in features
-                        ])
+                        # For subsequent steps, similar approach as Close prediction
+                        if step >= horizon:
+                            # Use average of last 'horizon' predictions
+                            pred_input = np.array([
+                                np.mean(pred_array[max(0, step-horizon):step, predictor_indices[feat]])
+                                for feat in features
+                            ])
+                            backtest_input = np.array([
+                                np.mean(backtest_array[max(0, step-horizon):step, predictor_indices[feat]])
+                                for feat in features
+                            ])
+                        else:
+                            # If we don't have enough predictions yet, combine historical and predicted
+                            pred_inputs = []
+                            backtest_inputs = []
+                            
+                            for feat in features:
+                                feat_idx = predictor_indices[feat]
+                                
+                                # Get predicted values so far
+                                pred_vals = pred_array[:step, feat_idx] if step > 0 else np.array([])
+                                backtest_vals = backtest_array[:step, feat_idx] if step > 0 else np.array([])
+                                
+                                # Calculate how many historical values we need
+                                hist_needed = horizon - len(pred_vals)
+                                
+                                if hist_needed > 0:
+                                    # Combine historical and predicted values
+                                    if feat in prediction.columns:
+                                        pred_hist = prediction[feat].iloc[-hist_needed:].values
+                                        all_pred_vals = np.concatenate([pred_hist, pred_vals])
+                                        pred_inputs.append(np.mean(all_pred_vals))
+                                    else:
+                                        pred_inputs.append(0)  # Fallback
+                                        
+                                    if feat in backtest.columns:
+                                        backtest_hist = backtest[feat].iloc[-hist_needed:].values
+                                        all_backtest_vals = np.concatenate([backtest_hist, backtest_vals])
+                                        backtest_inputs.append(np.mean(all_backtest_vals))
+                                    else:
+                                        backtest_inputs.append(0)  # Fallback
+                                else:
+                                    # We have enough predicted values already
+                                    pred_inputs.append(np.mean(pred_vals[-horizon:]))
+                                    backtest_inputs.append(np.mean(backtest_vals[-horizon:]))
+                            
+                            pred_input = np.array(pred_inputs)
+                            backtest_input = np.array(backtest_inputs)
                     
+                        
+
+
+
+
+
+
+
+
+
+
                     # Get model predictions
                     model = self.models[predictor][model_type]
                     raw_pred = model.predict(pred_input.reshape(1, -1))[0]
                     raw_backtest = model.predict(backtest_input.reshape(1, -1))[0]
                     
                     # Apply adaptive correction
-                    # lower_bound, upper_bound = adaptive_bounds(predictor, current_volatility, regime)
-                    # predictor_correction = max(lower_bound, min(upper_bound, error_correction[predictor]))
+                    lower_bound, upper_bound = adaptive_bounds(predictor, current_volatility, regime)
+                    predictor_correction = max(lower_bound, min(upper_bound, error_correction[predictor]))
                     
                     # Apply Kalman filter update for backtest
                     # (we can compare backtest with actual historical data)
-                    # actual_value = None
-                    # if next_backtest_date in self.data.index and predictor in self.data.columns:
-                    #     # actual_value = self.data.loc[next_backtest_date, predictor]
-                    #     actual_value = self.data[self.data.index == next_backtest_date][predictor].values[0]
-                    #     kalman_correction = apply_kalman_update(predictor, raw_backtest, actual_value, step)
-                    #     # Update the main correction factor with the Kalman result
-                    #     error_correction[predictor] = 0.7 * error_correction[predictor] + 0.3 * kalman_correction
+                    actual_value = None
+                    if next_backtest_date in self.data.index and predictor in self.data.columns:
+                        # actual_value = self.data.loc[next_backtest_date, predictor]
+                        actual_value = self.data[self.data.index == next_backtest_date][predictor].values[0]
+                        kalman_correction = apply_kalman_update(predictor, raw_backtest, actual_value, step)
+                        # Update the main correction factor with the Kalman result
+                        error_correction[predictor] = 0.7 * error_correction[predictor] + 0.3 * kalman_correction
                     
                     # Apply correction
-                    # # pred_value = raw_pred * predictor_correction
-                    # # backtest_value = raw_backtest * predictor_correction
-                    # # raw_backtest_value = raw_backtest
+                    pred_value = raw_pred * predictor_correction
+                    backtest_value = raw_backtest * predictor_correction
+                    raw_backtest_value = raw_backtest
                     
                     # # Store predictions
-                    # pred_array[step, pred_idx] = pred_value
-                    # backtest_array[step, pred_idx] = backtest_value
-                    # raw_backtest_array[step, pred_idx] = raw_backtest_value
+                    pred_array[step, pred_idx] = pred_value
+                    backtest_array[step, pred_idx] = backtest_value
+                    raw_backtest_array[step, pred_idx] = raw_backtest_value
                     
                     # Store predictions v2 mirror original code
-                    pred_array[step, pred_idx] = raw_pred
-                    backtest_array[step, pred_idx] = raw_backtest
-                    raw_backtest_array[step, pred_idx] = raw_backtest
+                    # pred_array[step, pred_idx] = raw_pred
+                    # backtest_array[step, pred_idx] = raw_backtest
+                    # raw_backtest_array[step, pred_idx] = raw_backtest
 
 
             
@@ -1271,38 +1433,38 @@ class StockPredictor:
             backtest_array = enforce_constraints(backtest_array, step)
             
             # # Step 5: Update ensemble weights based on performance (for backtest)
-            # if step > 0 and step % 5 == 0:
-            #     for predictor in predictors:
-            #         # Skip if we don't have enough data
-            #         if len(pred_dates) < 5:
-            #             continue
+            if step > 0 and step % 5 == 0:
+                for predictor in predictors:
+                    # Skip if we don't have enough data
+                    if len(pred_dates) < 5:
+                        continue
                         
-            #         pred_idx = predictor_indices[predictor]
+                    pred_idx = predictor_indices[predictor]
                     
-            #         # Check if we have actual data to compare with backtest
-            #         actual_values = []
-            #         for date in backtest_dates[-5:]:
-            #             if date in self.data.index and predictor in self.data.columns:
-            #                 actual_values.append(self.data.loc[date, predictor])
+                    # Check if we have actual data to compare with backtest
+                    actual_values = []
+                    for date in backtest_dates[-5:]:
+                        if date in self.data.index and predictor in self.data.columns:
+                            actual_values.append(self.data.loc[date, predictor])
                     
-            #         if len(actual_values) >= 3:  # Need enough data points
-            #             # Calculate errors for each ensemble member
-            #             errors = []
-            #             for i, corr in enumerate(ensemble_corrections[predictor]):
-            #                 # Get predictions with this correction factor
-            #                 corrected_preds = backtest_array[-len(actual_values):, pred_idx] * corr
+                    if len(actual_values) >= 3:  # Need enough data points
+                        # Calculate errors for each ensemble member
+                        errors = []
+                        for i, corr in enumerate(ensemble_corrections[predictor]):
+                            # Get predictions with this correction factor
+                            corrected_preds = backtest_array[-len(actual_values):, pred_idx] * corr
                             
-            #                 # Calculate mean squared error
-            #                 mse = np.mean((corrected_preds - actual_values) ** 2)
-            #                 errors.append(mse)
+                            # Calculate mean squared error
+                            mse = np.mean((corrected_preds - actual_values) ** 2)
+                            errors.append(mse)
                         
-            #             # Convert errors to weights (smaller error -> higher weight)
-            #             if max(errors) > min(errors):  # Avoid division by zero
-            #                 inv_errors = 1.0 / (np.array(errors) + 1e-10)
-            #                 new_weights = inv_errors / sum(inv_errors)
+                        # Convert errors to weights (smaller error -> higher weight)
+                        if max(errors) > min(errors):  # Avoid division by zero
+                            inv_errors = 1.0 / (np.array(errors) + 1e-10)
+                            new_weights = inv_errors / sum(inv_errors)
                             
-            #                 # Update weights with smoothing
-            #                 ensemble_weights[predictor] = 0.7 * ensemble_weights[predictor] + 0.3 * new_weights
+                            # Update weights with smoothing
+                            ensemble_weights[predictor] = 0.7 * ensemble_weights[predictor] + 0.3 * new_weights
         
         # Convert arrays to DataFrames
         prediction_df = pd.DataFrame(
@@ -1710,6 +1872,24 @@ class StockPredictor:
 
 
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
     # # Original Code
     # def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
     #     """
@@ -2093,14 +2273,14 @@ class StockPredictor:
                 )
                 # print(prediction)
                 # print(backtest)
-                first_day = pd.to_datetime(end_date - timedelta(days=5 + horizon))
+                first_day = pd.to_datetime(end_date - timedelta(days=   int(round(1.5* horizon))))
 
                 backtest_mape = mean_absolute_percentage_error(prediction_dataset.data.Close[prediction_dataset.data.index >= first_day], backtest[backtest.index >= first_day].Close)
                 print('MSE of backtest period vs real data',backtest_mape)
                 print('Horizon: ',horizon)
                 print('-----------------------------------------------------------------------------------------------------------')
-                if backtest_mape > 0.30:
-                    continue
+                # if backtest_mape > 0.30:
+                #     continue
 
                 # Data Viz (Not that key)
                 plt.figure(figsize=(12, 6))

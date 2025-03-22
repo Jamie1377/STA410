@@ -269,8 +269,8 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         y = np.asarray(y, dtype=np.float64).ravel()
 
         # Handle NaNs and infinities
-        X = np.nan_to_num(X, nan=0.0, posinf=1e5, neginf=-1e5)
-        y = np.nan_to_num(y, nan=0.0, posinf=1e5, neginf=-1e5)
+        X = np.nan_to_num(X, nan=0.0, posinf=1e15, neginf=-1e15)
+        y = np.nan_to_num(y, nan=0.0, posinf=1e15, neginf=-1e15)
 
         # Validate input shapes
         if X.shape[0] != y.shape[0]:
@@ -284,14 +284,14 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         try:
             # self.arima_model =  pm.auto_arima(
             # y,
-            # seasonal=True, m=6,
+            # seasonal=True,
             # stepwise=True, trace=True,
-            # # start_p=1,
+            # start_p=1,
             # d=1,
             # error_action='ignore',
             # suppress_warnings=True,
-            # information_criterion='aic',
-            # max_order=10  # Limit parameter search space
+            # information_criterion='bic',
+            # max_order=8  # Limit parameter search space
             # )
             # self.arima_model_fit = self.arima_model
             self.arima_model =  SARIMAX(

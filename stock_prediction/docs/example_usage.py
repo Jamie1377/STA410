@@ -122,7 +122,7 @@ stock_settings = {
 #             plt.show()
 
 toc = time.time()
-StockPredictor.full_workflow("2023-09-01", date.today(), companies=["SBUX", "LCID"],stock_settings=stock_settings)
+StockPredictor.full_workflow("2023-09-01", date.today(), companies=[ 'MTDR', 'DINO'])
 tic = time.time()
 tic-toc
 print('Time taken', tic-toc)

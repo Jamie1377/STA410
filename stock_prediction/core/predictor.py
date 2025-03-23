@@ -2207,7 +2207,7 @@ class StockPredictor:
     #         print("-" * 50)
 
     def full_workflow(
-        start_date, end_date, predictors=None, companies=None, stock_settings={}
+        start_date, end_date, predictors=None, companies=None, stock_settings=None
     ):
         """
         This function is used to output the prediction of the stock price for the future based on the stock price data from the start date to the end date.
@@ -2217,6 +2217,7 @@ class StockPredictor:
         end_date (str): The end date of the stock price data
         predictors (list): The list of predictors used to predict the stock price
         companies (list): The list of company names of the stocks
+        stock_settings (dict): The dictionary of the stock settings
         """
         default_horizons = [5, 7, 10]
         default_weight = False
@@ -2230,6 +2231,7 @@ class StockPredictor:
                 interval="1d",
             )
             prediction_dataset.load_data()
+     
             if predictors is None:
                 predictors = [
                     "Close",
@@ -2252,7 +2254,7 @@ class StockPredictor:
             predictors = predictors
 
             predictor = prediction_dataset
-            if len(stock_settings) != 0 or company in stock_settings:
+            if stock_settings is not None and (len(stock_settings) != 0 or company in stock_settings):
                 # Use custom settings for the stock
                 settings = stock_settings[company]
                 horizons = settings["horizons"]

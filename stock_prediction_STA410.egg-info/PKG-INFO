@@ -1,6 +1,6 @@
 Metadata-Version: 2.4
 Name: stock_prediction_STA410
-Version: 0.1.3
+Version: 0.1.4
 License-File: LICENSE
 Requires-Dist: numpy
 Requires-Dist: pandas

@@ -12,25 +12,6 @@ def find_d(series):
     return d
 
 
-# def prepare_features(data, target="Close"):
-#     """Create lagged features and technical indicators"""
-#     df = data.copy()
-
-#     # Lagged features
-#     for lag in [1, 2, 3, 5, 8, 13]:
-#         df[f"lag_{lag}"] = df[target].shift(lag)
-
-#     # Rolling features
-#     windows = [5, 20, 50]
-#     for window in windows:
-#         df[f"ma_{window}"] = df[target].rolling(window).mean()
-#         df[f"vol_{window}"] = df[target].pct_change().rolling(window).std()
-
-#     # Drop missing values
-#     df.dropna(inplace=True)
-#     return df
-
-
 def get_next_valid_date(current_date):
     """
     Returns the next valid trading day using NYSE calendar.

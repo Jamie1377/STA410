@@ -2,23 +2,18 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import date, timedelta
-from statsmodels.tsa.arima.model import ARIMA
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-from sklearn.metrics import mean_squared_error, root_mean_squared_error, mean_absolute_percentage_error
+from sklearn.metrics import root_mean_squared_error, mean_absolute_percentage_error
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
-from sklearn.ensemble import RandomForestRegressor
-from sklearn.tree import DecisionTreeRegressor
-from sklearn.linear_model import LinearRegression, Ridge, Lasso
-from sklearn.model_selection import cross_val_score
-from xgboost import XGBRegressor
-from sklearn.neighbors import KNeighborsRegressor
+from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
+from sklearn.linear_model import LinearRegression, Ridge
 import matplotlib.pyplot as plt
 import pandas_market_calendars as mcal
 from sklearn.model_selection import train_test_split
 from stock_prediction.core import ARIMAXGBoost
-from stock_prediction.utils import get_mae, get_next_valid_date
+from stock_prediction.utils import get_next_valid_date
 
-# Sample Dataset
+
+# Sample Dataset 
 stock_data = yf.download("AAPL", start="2024-02-20", end=date.today())
 stock_data.columns = stock_data.columns.droplevel(1)
 stock_data
@@ -33,7 +28,6 @@ class StockPredictor:
         end_date (str): End date for data
         interval (str): Data interval (1d, 1h, etc)
     """
-
     def __init__(self, symbol, start_date, end_date=None, interval="1d"):
         self.symbol = symbol
         self.start_date = start_date
@@ -46,7 +40,6 @@ class StockPredictor:
         self.feature_sets = {
             "Close": {"target": "Close", "features": None},
             "Low": {"target": "Low", "features": None},
-            # "Adj Close": {"target": "Adj Close", "features": None},
             "Daily Returns": {"target": "Daily Returns", "features": None},
             "Volatility": {"target": "Volatility", "features": None},
             "TNX": {"target": "TNX", "features": None},
@@ -59,8 +52,6 @@ class StockPredictor:
         self.interval = interval
         self.history = []  # New attribute for error correction
 
-
-        # self.one_step_forward_forecast = {}
 
     def load_data(self):
         """Load and prepare stock data with features"""
@@ -76,8 +67,6 @@ class StockPredictor:
         # Add technical indicators
         self.data["MA_50"] = self.data["Close"].rolling(window=50).mean()
         self.data["MA_200"] = self.data["Close"].rolling(window=200).mean()
-
-
         # Add rolling statistics
         self.data["rolling_std"] = self.data["Close"].rolling(window=50).std()
         self.data["rolling_min"] = self.data["Close"].rolling(window=50).min()
@@ -86,13 +75,10 @@ class StockPredictor:
         self.data["rolling_sum"] = self.data["Close"].rolling(window=50).sum()
         self.data["rolling_var"] = self.data["Close"].rolling(window=50).var()
         self.data["rolling_ema"] = (
-            self.data["Close"].ewm(span=50, adjust=False).mean()
-        )  # Exponential Moving Average
-
+            self.data["Close"].ewm(span=50, adjust=False).mean())  # Exponential Moving Average
         # Add rolling quantiles (25th and 75th percentiles)
         self.data["rolling_25p"] = self.data["Close"].rolling(window=50).quantile(0.25)
         self.data["rolling_75p"] = self.data["Close"].rolling(window=50).quantile(0.75)
-
         # Drop rows with NaN values (due to rolling window)
         self.data.dropna(inplace=True)
         stock_data.index.name = "Date"  # Ensure the index is named "Date"
@@ -117,7 +103,6 @@ class StockPredictor:
         vix = yf.download(
             "^VIX", start=self.start_date, end=self.end_date, interval=self.interval
         )["Close"]
-
         economic_data = (
             pd.concat(
                 [
@@ -213,456 +198,13 @@ class StockPredictor:
                     "X_test_poly": X_test_poly,
                 }
             )
-
             self.scalers[name] = scaler
             self.transformers[name] = transformer
 
         return self
-
-    # def train_sarima(self):
-    #     """Train SARIMA model"""
-
-    #     for feature_name, feature_set in self.feature_sets.items():
-    #         self.models[feature_name] = {}
-    #         self.forecasts[feature_name] = {}
-    #         self.metrics[feature_name] = {}
-
-    #         dtrain = feature_set["X_train_df"].diff()
-    #         ddtrain = dtrain.diff()
-    #         dddtrain = ddtrain.diff()
-    #         logtrain = np.log(feature_set["X_train"])
-    #         log2train = np.log(logtrain)
-    #         log3train = np.log(log2train)
-    #         log2train = np.log(
-    #             np.log(feature_set["y_train"])
-    #         )  # Double log transformation
-    #         model = SARIMAX(log2train, order=(2, 1, 3), seasonal_order=(0, 0, 0, 0))
-    #         self.models[feature_name]["sarima"] = model.fit()
-
-    #         # Generate forecast
-    #         forecast_log = self.models[feature_name]["sarima"].forecast(
-    #             steps=len(feature_set["y_test"])
-    #         )
-    #         self.forecasts[feature_name]["sarima"] = np.exp(
-    #             np.exp(forecast_log)
-    #         )  # Transform back
-    #         self.metrics[feature_name]["sarima"] = root_mean_squared_error(
-    #             feature_set["y_test"][: len(forecast_log)],
-    #             self.forecasts[feature_name]["sarima"],
-    #         )
-    #     return self
-
-    # def viz_sarima(self):
-    #     "Vizualize Sarima model"
-    #     dtrain = self.X_train.diff()
-    #     ddtrain = dtrain.diff()
-    #     dddtrain = ddtrain.diff()
-    #     plt.plot(dtrain.index, dtrain)
-    #     logtrain = np.log(self.X_train)
-    #     log2train = np.log(logtrain)
-    #     log3train = np.log(log2train)
-    #     plt.plot(logtrain.index, logtrain)
-    #     plt.plot(log2train.index, log2train)
-    #     plt.plot(log3train.index, log3train)
-    #     plt.plot(self.X_train.index, self.X_train)
-
-    # def train_ml_models(self):
-    #     """Train multiple machine learning models"""
-    #     base_models = {
-    #         "random_forest": RandomForestRegressor(n_estimators=100, random_state=42),
-    #         "decision_tree": DecisionTreeRegressor(random_state=42),
-    #         "linear": LinearRegression(),
-    #         "xgboost": XGBRegressor(n_estimators=100, learning_rate=0.1, max_depth=3),
-    #         "knn": KNeighborsRegressor(n_neighbors=20, weights="distance"),
-    #     }
-    #     # n = len(self.X_train)
-    #     # p = self.X_train.shape[1]  # Number of predictors
-
-    #     # Train and evaluate each model
-
-    #     for feature_name, feature_set in self.feature_sets.items():
-
-    #         for model_name, model in base_models.items():
-    #             fitted_model = model.fit(feature_set["X_train"], feature_set["y_train"])
-    #             self.models[feature_name][model_name] = fitted_model
-
-    #             # Calculate metrics
-    #             y_pred = fitted_model.predict(feature_set["X_test"])
-    #             self.forecasts[feature_name][model_name] = y_pred
-    #             rmse = root_mean_squared_error(feature_set["y_test"], y_pred)
-    #             self.metrics[feature_name][model_name] = rmse
-
-    #     return self
-
-    # def arima_ml(self):
-
-    #     for feature_name, feature_set in self.feature_sets.items():
-    #         self.forecasts[feature_name]["arima_ml"] = {}
-    #         target = feature_set["target"]
-    #         y = self.data[target]
-    #         # train, test = train_test_split( y, test_size=0.2, shuffle=False, random_state=42)
-    #         # Assuming `y` is your time series data (e.g., stock prices)
-    #         train_size = int(len(y) * 0.8)  # 80% for training
-    #         train, test = y[:train_size], y[train_size:]
-
-    #         # stock_prices = self.data["Close"]   #.iloc[:-horizon,]
-    #         arima_model = ARIMA(
-    #             train, order=(1, 1, 1)
-    #         )  # Replace p, d, q with appropriate values
-    #         arima_fit = arima_model.fit()
-    #         train_size = len(train)
-    #         test_size = len(test)
-    #         # arima_predictions = arima_fit.predict(start=train_size, end=train_size + test_size - 1)
-    #         arima_forecast = arima_fit.forecast(steps=test_size)
-    #         arima_predictions = arima_fit.predict()
-
-    #         # Step 2: Calculate Residuals
-    #         residuals = train - arima_predictions
-
-    #         # Step 3: Prepare Data for Machine Learning
-    #         lagged_features = pd.concat(
-    #             [residuals.shift(i) for i in range(1, 6)], axis=1
-    #         )  # Lagged residuals
-    #         lagged_features.columns = [f"lag_{i}" for i in range(1, 6)]
-    #         lagged_features["residual"] = residuals
-    #         lagged_features = lagged_features.dropna()
-
-    #         X = lagged_features.drop("residual", axis=1)
-    #         y = lagged_features["residual"]
-
-    #         X_train, X_test, y_train, y_test = train_test_split(
-    #             X, y, test_size=0.2, shuffle=False, random_state=42
-    #         )
-
-    #         # Step 4: Train XGBoost on Residuals
-    #         xgb_model = XGBRegressor()
-    #         xgb_model.fit(X_train, y_train)
-
-    #         # Step 5: Predict Residuals and Combine Predictions
-    #         xgb_predictions = xgb_model.predict(X_test)
-    #         final_predictions = arima_forecast[-len(X_test) :] + xgb_predictions
-
-    #         # Step 6: Evaluate Performance
-    #         test_rmse = root_mean_squared_error(y[-len(X_test) :], final_predictions)
-    #         print(f"Test Root Mean Squared Error: {test_rmse}")
-    #         self.forecasts[feature_name]["arima_ml"] = final_predictions
-
-    #         plt.figure(figsize=(10, 6))
-    #         plt.plot(
-    #             self.data[target][-len(X_test) :].index,
-    #             self.data[target][-len(X_test) :],
-    #             label="Actual Prices",
-    #         )
-    #         plt.plot(
-    #             self.data[target][-len(X_test) :].index,
-    #             final_predictions,
-    #             label="Predicted Prices",
-    #             linestyle="--",
-    #         )
-    #         plt.legend()
-    #         plt.title(f"{feature_name} Predictions by ARIMA + ML")
-    #         plt.xlabel("Time")
-    #         plt.ylabel("Price")
-
-    #         # plt.xlim(left = pd.Timestamp('2024-01-01'), right = date.today()  + timedelta(days=15, hours=-5))
-    #         plt.show()
-
-
-
-
-
-        # return final_predictions
-
-    # def fine_tune_tree_models(self):
-
-    #     for feature_name, feature_set in self.feature_sets.items():
-
-    #         self.models[feature_name]["decision_tree_max_leaf_node"] = {}
-    #         self.forecasts[feature_name]["decision_tree_max_leaf_node"] = {}
-    #         self.metrics[feature_name]["decision_tree_max_leaf_node"] = {}
-
-    #         dt_rmse = root_mean_squared_error(
-    #             feature_set["y_test"], self.forecasts[feature_name]["decision_tree"]
-    #         )
-    #         print(
-    #             "Test RMSE for Decision Tree Model when not specifying max_leaf_nodes: {}".format(
-    #                 dt_rmse
-    #             )
-    #         )
-    #         candidate_max_leaf_nodes = [5, 25, 50, 230, 250, 300, 500]
-    #         scores = {
-    #             leaf_size: get_mae(
-    #                 leaf_size,
-    #                 feature_set["X_train"],
-    #                 feature_set["X_test"],
-    #                 feature_set["y_train"],
-    #                 feature_set["y_test"],
-    #             )
-    #             for leaf_size in candidate_max_leaf_nodes
-    #         }
-    #         best_tree_size = min(scores, key=scores.get)
-    #         n = len(feature_set["X_train"])
-    #         p = feature_set["X_train"].shape[1]  # Number of predictors
-    #         self.models[feature_name]["decision_tree_max_leaf_node"] = (
-    #             DecisionTreeRegressor(max_leaf_nodes=best_tree_size, random_state=0)
-    #         )
-    #         self.models[feature_name]["decision_tree_max_leaf_node"].fit(
-    #             feature_set["X_train"],
-    #             feature_set["y_train"],
-    #         )
-    #         self.forecasts[feature_name]["decision_tree_max_leaf_node"] = self.models[
-    #             feature_name
-    #         ]["decision_tree_max_leaf_node"].predict(feature_set["X_test"])
-    #         # self.one_step_forward_forecast["decision_tree_max_leaf_node"] = self.models["decision_tree_max_leaf_node"].predict(X_test[-1,].reshape(1, -1))
-    #         self.metrics[feature_name]["decision_tree_max_leaf_node"] = {
-    #             f"rmse (decision_tree_max_leaf_node)": root_mean_squared_error(
-    #                 feature_set["y_test"],
-    #                 self.forecasts[feature_name]["decision_tree_max_leaf_node"],
-    #             ),
-    #             f"adjusted_r2 (decision_tree_max_leaf_node)": 1
-    #             - (
-    #                 1
-    #                 - self.models[feature_name]["decision_tree_max_leaf_node"].score(
-    #                     feature_set["X_train"], feature_set["y_train"]
-    #                 )
-    #             )
-    #             * (n - 1)
-    #             / (n - p - 1),
-    #         }
-    #         print(
-    #             "Test RMSE for Decision Tree Model when specifying max_leaf_nodes: {}".format(
-    #                 root_mean_squared_error(
-    #                     feature_set["y_test"],
-    #                     self.forecasts[feature_name]["decision_tree_max_leaf_node"],
-    #                 )
-    #             )
-    #         )
-    #         return self
-
-    # def train_regularized_models(self):
-    #     """Train Ridge and Lasso models with cross-validation"""
-    #     # Test range of alpha values
-    #     alphas = np.logspace(-4, 4, 50)
-
-    #     for feature_name, feature_set in self.feature_sets.items():
-    #         for model in ["ridge", "lasso"]:
-    #             self.models[feature_name][model] = {}
-    #             self.forecasts[feature_name][model] = {}
-    #             self.metrics[feature_name][model] = {}
-
-    #         # Ridge Regression
-    #         ridge_cv_mse = []
-    #         for alpha in alphas:
-    #             ridge = Ridge(alpha=alpha, fit_intercept=True)
-    #             mse = -cross_val_score(
-    #                 ridge,
-    #                 feature_set["X_train_scaled"],
-    #                 feature_set["y_train"],
-    #                 scoring="neg_mean_squared_error",
-    #                 cv=5,
-    #             ).mean()
-    #             ridge_cv_mse.append(mse)
-
-    #         # Find best Ridge alpha
-    #         best_ridge_alpha = alphas[np.argmin(ridge_cv_mse)]
-    #         self.best_params["ridge_alpha"] = best_ridge_alpha
-
-    #         # Train Ridge with best alpha
-    #         self.models[feature_name]["ridge"] = Ridge(
-    #             alpha=best_ridge_alpha, fit_intercept=True
-    #         )
-    #         self.models[feature_name]["ridge"].fit(
-    #             feature_set["X_train_scaled"], feature_set["y_train"]
-    #         )
-    #         self.forecasts[feature_name]["ridge"] = self.models[feature_name][
-    #             "ridge"
-    #         ].predict(feature_set["X_test_scaled"])
-    #         # self.one_step_forward_forecast['ridge'] = self.models['ridge'].predict(X_test_scaled[-1,].reshape(1, -1))
-    #         # Lasso Regression
-    #         lasso_cv_mse = []
-    #         for alpha in alphas:
-    #             lasso = Lasso(alpha=alpha, fit_intercept=True)
-    #             mse = -cross_val_score(
-    #                 lasso,
-    #                 feature_set["X_train_scaled"],
-    #                 feature_set["y_train"],
-    #                 scoring="neg_mean_squared_error",
-    #                 cv=5,
-    #             ).mean()
-    #             lasso_cv_mse.append(mse)
-
-    #         # Find best Lasso alpha
-    #         best_lasso_alpha = alphas[np.argmin(lasso_cv_mse)]
-    #         self.best_params["lasso_alpha"] = best_lasso_alpha
-
-    #         # Train Lasso with best alpha
-    #         self.models[feature_name]["lasso"] = Lasso(
-    #             alpha=best_lasso_alpha, fit_intercept=True
-    #         )
-    #         self.models[feature_name]["lasso"].fit(
-    #             feature_set["X_train_scaled"], feature_set["y_train"]
-    #         )
-    #         self.forecasts[feature_name]["lasso"] = self.models[feature_name][
-    #             "lasso"
-    #         ].predict(feature_set["X_test_scaled"])
-    #         # self.one_step_forward_forecast['lasso'] = self.models['lasso'].predict(X_test_scaled[-1,].reshape(1, -1))
-
-    #         # Calculate metrics
-    #         self.metrics[feature_name]["ridge"] = {
-    #             "rmse": root_mean_squared_error(
-    #                 feature_set["y_test"], self.forecasts[feature_name]["ridge"]
-    #             ),
-    #             "cv_scores": cross_val_score(
-    #                 self.models[feature_name]["ridge"],
-    #                 feature_set["X_train_scaled"],
-    #                 feature_set["y_train"],
-    #                 cv=5,
-    #                 scoring="r2",
-    #             ),
-    #             "cv_rmses": -cross_val_score(
-    #                 self.models[feature_name]["ridge"],
-    #                 feature_set["X_train_scaled"],
-    #                 feature_set["y_train"],
-    #                 cv=5,
-    #                 scoring="neg_root_mean_squared_error",
-    #             ),
-    #         }
-
-    #         self.metrics[feature_name]["lasso"] = {
-    #             "rmse": root_mean_squared_error(
-    #                 feature_set["y_test"], self.forecasts[feature_name]["lasso"]
-    #             ),
-    #             "cv_scores": cross_val_score(
-    #                 self.models[feature_name]["lasso"],
-    #                 feature_set["X_train_scaled"],
-    #                 feature_set["y_train"],
-    #                 cv=5,
-    #                 scoring="r2",
-    #             ),
-    #             "cv_rmses": -cross_val_score(
-    #                 self.models[feature_name]["lasso"],
-    #                 feature_set["X_train_scaled"],
-    #                 feature_set["y_train"],
-    #                 cv=5,
-    #                 scoring="neg_root_mean_squared_error",
-    #             ),
-    #         }
-
-    #     return self
-
-    # def print_regularization_metrics(self):
-    #     """Print detailed metrics for regularized models"""
-    #     print("\nRegularization Models Performance:")
-    #     print("-" * 50)
-    #     for model in ["ridge", "lasso"]:
-    #         if model in self.metrics:
-    #             print(f"\n{model.upper()} Regression:")
-    #             print(f"Best alpha: {self.best_params[f'{model}_alpha']:.6f}")
-    #             print(f"RMSE: {self.metrics[model]['rmse']:.2f}")
-    #             print(
-    #                 f"CV R² scores: {self.metrics[model]['cv_scores'].mean():.3f} "
-    #                 f"(±{self.metrics[model]['cv_scores'].std()*2:.3f})"
-    #             )
-    #             if model == "ridge":
-    #                 print(f"Feature coefficients:")
-    #                 for feat, coef in zip(self.X.columns, self.models[model].coef_):
-    #                     print(f"  {feat}: {coef:.4f}")
-    #     print("-" * 50)
-
-    # def train_polynomial(self, degree=2):
-    #     """Train polynomial regression model"""
-
-    #     for feature_name, feature_set in self.feature_sets.items():
-    #         self.transformers[feature_name] = {}
-    #         self.forecasts[feature_name]["polynomial"] = {}
-
-    #         # transformer = PolynomialFeatures(degree=degree, include_bias=False)
-    #         # X_train_poly = transformer.fit_transform(feature_set["X_train_scaled"])
-    #         # X_test_poly = transformer.transform(feature_set["X_test_scaled"])
-
-    #         X_train_poly = feature_set["X_train_poly"]
-    #         X_test_poly = feature_set["X_test_poly"]
-    #         y_train = feature_set["y_train"]
-    #         y_test = feature_set["y_test"]
-
-    #         model = LinearRegression()
-    #         model.fit(X_train_poly, y_train)
-
-    #         n = len(X_train_poly)
-    #         p = X_train_poly.shape[1]  # Number of predictors
-
-    #         self.models[feature_name]["polynomial"] = model
-    #         self.forecasts[feature_name]["polynomial"] = model.predict(X_test_poly)
-    #         # self.one_step_forward_forecast['polynomial'] = model.predict(X_test_poly[-1,].reshape(1, -1))
-    #         self.metrics[feature_name]["polynomial"] = {
-    #             "Polynomial Regression Model Test RMSE": root_mean_squared_error(
-    #                 y_test, self.forecasts[feature_name]["polynomial"]
-    #             ),
-    #             "Polynomial Regression Model Adjusted_r2": 1
-    #             - (1 - model.score(X_train_poly, y_train)) * (n - 1) / (n - p - 1),
-    #         }
-    #     return self
-
-    # def predict_next_day_and_update_with_features(
-    #     self, model, feature_cols, target_col, scaler=None
-    # ):
-    #     """
-    #     Predict the next day's value using the last row of the dataset, update predictors, and append to the dataset.
-
-    #     Parameters:
-    #         model: The forecasting model (e.g., LSTM, ARIMA, etc.).
-    #         data: DataFrame containing the dataset.
-    #         feature_cols: List of feature column names.
-    #         target_col: Name of the target column.
-    #         scaler: Optional scaler for inverse transformation of predictions.
-
-    #     Returns:
-    #         updated_data: DataFrame updated with the predicted value.
-    #         next_day_prediction: The forecasted value for the next day.
-    #     """
-    #     # Get the last row's features
-    #     last_features = self.data.loc[self.data.index[-1], feature_cols].values.reshape(
-    #         1, -1
-    #     )
-
-    #     # Perform prediction
-    #     next_day_prediction = model.predict(last_features)
-
-    #     # Inverse transform the prediction if a scaler is provided
-    #     if scaler is not None:
-    #         next_day_prediction = scaler.inverse_transform(
-    #             next_day_prediction.reshape(-1, 1)
-    #         ).flatten()
-
-    #     # Prepare a new row with updated predictors
-    #     new_row = {col: 0 for col in self.data.columns}  # Initialize with zeros
-
-    #     # Update predictors (example: using last values or derived metrics)
-    #     for col in feature_cols:
-    #         if col == target_col:  # Skip the target column in features
-    #             continue
-    #         if "lag" in col:  # Example for lagged features
-    #             lag_step = int(col.split("_")[-1])  # Extract lag step (e.g., 'lag_1')
-    #             new_row[col] = self.data.loc[self.data.index[-lag_step], target_col]
-    #         elif "ma" in col:  # Example for moving averages
-    #             window_size = int(
-    #                 col.split("_")[-1]
-    #             )  # Extract window size (e.g., 'ma_5')
-    #             new_row[col] = self.data[target_col].iloc[-window_size:].mean()
-    #         else:
-    #             new_row[col] = self.data.loc[
-    #                 self.data.index[-1], col
-    #             ]  # Static predictors
-
-    #     # Add the predicted target value
-    #     new_row[target_col] = next_day_prediction[0]
-
-    #     # Append the new row to the dataset
-    #     updated_data = self.data.append(new_row, ignore_index=True)
-
-    #     return updated_data, next_day_prediction[0]
-
-    def prepare_models(self, predictors: list[str], horizon, weight: False):
+ 
+ 
+    def prepare_models(self, predictors: list[str], horizon, weight: bool = False):
         """
         Prepare models for each predictor.
 
@@ -676,6 +218,7 @@ class StockPredictor:
         self.models = {}
         self.scalers = {}
         self.transformers = {}
+        self.feature_importances = {}
 
         for predictor in predictors:
             # Select features excluding the current predictor
@@ -700,63 +243,133 @@ class StockPredictor:
             X_train_poly = poly.fit_transform(X_train_scaled)
             X_test_poly = poly.transform(X_test_scaled)
 
-            if weight is True:
-
-                allowed_columns = list(self.data.iloc[:, 8:].columns)
-                rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
-                filtered_columns = [
-                    col for col in X_train.columns if col in allowed_columns
-                ]
-                filtered_df = X_train.loc[:, filtered_columns]
-                # filtered_df = X_train
-                rf_model.fit(filtered_df, y_train)
-                importances = rf_model.feature_importances_ * len(filtered_columns)
-
-                importance_df = pd.DataFrame(
-                    {"Feature": filtered_df.columns, "Importance": importances}
-                )
-                importance_df["Weight"] = (
-                    importance_df["Importance"] / importance_df["Importance"].sum()
-                )
-
-                scaler_weight = StandardScaler()
-                X_train[filtered_columns] = scaler_weight.fit_transform(
-                    X_train[filtered_columns]
-                )
-                X_train[filtered_columns] *= importances
-
-            # Perform random search
-            # best_order, best_model = random_search_arima(y, p_range, d_range, q_range, n_iter=100, random_state=42)
-
-            # print(f"Best ARIMA order: {best_order}")
-
             # Train models
             models = {
                 "linear": LinearRegression(),
                 "ridge": Ridge(alpha=1.0),
                 "polynomial": Ridge(alpha=1.0),
                 "arimaxgb": ARIMAXGBoost(),
-                # best_model
-                # ARIMAXGBoost()  # q =5 is ok    q
             }
 
-            # reshape
+            # Feature importance 
+            feature_weights = np.ones(len(features))
+            # if weight is True:
+            #     allowed_columns = list(self.data.iloc[:, 8:].columns)
+            #     rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+            #     filtered_columns = [
+            #         col for col in X_train.columns if col in allowed_columns
+            #     ]
+            #     filtered_df = X_train.loc[:, filtered_columns]
+            #     # filtered_df = X_train
+            #     rf_model.fit(filtered_df, y_train)
+            #     importances = rf_model.feature_importances_ * len(filtered_columns)
 
-            # Fit models
-            models["linear"].fit(X_train, y_train)
-            models["ridge"].fit(X_train_scaled, y_train)
-            models["polynomial"].fit(X_train_poly, y_train)
-            models["arimaxgb"].fit(X_train, y_train)
-            # if predictor == 'Close':
-            #     models['arimaxgb'].fine_tune_boost(X_train=X_train, y_train=y_train, X_val=X_test, y_val=y_test)
+            #     importance_df = pd.DataFrame(
+            #         {"Feature": filtered_df.columns, "Importance": importances}
+            #     )
+            #     importance_df["Weight"] = (
+            #         importance_df["Importance"] / importance_df["Importance"].sum()
+            #     )
 
+            #     scaler_weight = StandardScaler()
+            #     X_train[filtered_columns] = scaler_weight.fit_transform(
+            #         X_train[filtered_columns]
+            #     )
+                # X_train[filtered_columns] *= importances
+
+
+
+            from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
+            from   sklearn.model_selection import cross_val_score
+
+            def advanced_feature_weighting(X, y):
+                # Multiple models for feature importance
+                models = [
+                    RandomForestRegressor(n_estimators=100),
+                    GradientBoostingRegressor(n_estimators=100),
+                    ExtraTreesRegressor(n_estimators=100)
+                ]
+                
+                # Collect feature importances from multiple models
+                all_importances = []
+                for model in models:
+                    model.fit(X, y)
+                    all_importances.append(model.feature_importances_)
+                
+                # Aggregate importances
+                avg_importances = np.mean(all_importances, axis=0)
+                
+                # Normalize and apply cross-validation performance weighting
+                cv_scores = []
+                for model in models:
+                    scores = cross_val_score(model, X, y, cv=5, scoring='neg_mean_squared_error')
+                    cv_scores.append(-np.mean(scores))
+                
+                # Weight importances by model performance
+                model_weights = 1 / np.array(cv_scores)
+                model_weights /= np.sum(model_weights)
+                
+                # Final feature weights
+                weighted_importances = np.zeros_like(avg_importances)
+                for i, (imp, mw) in enumerate(zip(all_importances, model_weights)):
+                    weighted_importances += imp * mw
+                
+                return weighted_importances / np.sum(weighted_importances)
+            if weight is True:
+                
+                # # Attempt to get feature importances using Random Forest
+                # rf_model = RandomForestRegressor(n_estimators=100, random_state=42)
+                # rf_model.fit(X_train, y_train)
+
+                                
+                # # Get feature importances
+                # importances = rf_model.feature_importances_
+                
+                
+
+                # # Normalize importances
+                # feature_weights = importances / np.sum(importances)
+                feature_weights = advanced_feature_weighting(X_train, y_train)
+                
+                
+                # Store feature importances for reference
+                self.feature_importances[predictor] = dict(zip(features, feature_weights))
+                
+                # Apply weights to training data
+                X_train_weighted = X_train.copy()
+                for i, feat in enumerate(features):
+                    X_train_weighted[feat] *= feature_weights[i]
+                
+                X_train_scaled_weighted = scaler.transform(X_train_weighted)
+                X_train_poly_weighted = poly.transform(X_train_scaled_weighted)
+            
+            
+
+
+    
+                # Weighted fitting for applicable models
+                models["linear"].fit(X_train_weighted, y_train)
+                models["ridge"].fit(X_train_scaled_weighted, y_train)
+                models["polynomial"].fit(X_train_poly_weighted, y_train)
+                models["arimaxgb"].fit(X_train_weighted, y_train)
+        
+            else:
+
+
+
+
+
+                # Fit models
+                models["linear"].fit(X_train, y_train)
+                models["ridge"].fit(X_train_scaled, y_train)
+                models["polynomial"].fit(X_train_poly, y_train)
+                models["arimaxgb"].fit(X_train, y_train)
+            
             for name, model in models.items():
 
                 if name == "linear":
                     y_pred = model.predict(X_test)
                     r2 = r2 = 1 - (1 - model.score(X_test, y_test))
-
-                    # r2 = r2 = 1 - (1 -model.score(X_test, y_test))
                 elif name == "ridge":
                     y_pred = model.predict(scaler.transform(X_test))
                     r2 = r2 = 1 - (1 - model.score(X_test_scaled, y_test))
@@ -765,18 +378,16 @@ class StockPredictor:
                     r2 = r2 = 1 - (1 - model.score(X_test_poly, y_test))
 
                 # Compute metrics
-
-                mse = root_mean_squared_error(y_test, y_pred)
+                rmse = root_mean_squared_error(y_test, y_pred)
 
                 print(f"{predictor} - {name.capitalize()} Model:")
-                print(f"  Mean Squared Error: {mse:.4f}")
+                print(f"  Mean Squared Error: {rmse:.4f}")
                 print(f"  R² Score: {r2:.4f}")
 
             # Store models, scalers, and transformers
             self.models[predictor] = models
             self.scalers[predictor] = scaler
             self.transformers[predictor] = poly
-
 
 
     def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
@@ -805,7 +416,6 @@ class StockPredictor:
         prediction = self.data[predictors].copy().iloc[-horizon:].dropna()
         backtest = self.data[predictors].copy().iloc[:-horizon].dropna()
         observation = self.data[predictors].copy().dropna()
-        # raw_backtest = self.data[predictors].copy().iloc[:-horizon].dropna()
         
         # Initialize arrays for storing predictions
         pred_array = np.zeros((horizon, len(predictors)))
@@ -826,11 +436,11 @@ class StockPredictor:
         bounds = {}
         for p in predictors:
             if p in price_vars:
-                bounds[p] = (0.97, 1.03)  # Tighter bounds for prices
+                bounds[p] = (0.95, 1.05)  # Tighter bounds for prices
             elif p.startswith("MA_"):
                 bounds[p] = (0.97, 1.03)  # Even tighter for moving averages
             else:
-                bounds[p] = (0.8, 1.2)  # Wider for other indicators
+                bounds[p] = (0.6, 1.4)  # Wider for other indicators
         
         # 3. Initialize regime detection
         regime = "normal"  # Default regime
@@ -842,10 +452,10 @@ class StockPredictor:
         
         # 5. Create ensembles of correction factors
         ensemble_corrections = {
-            p: [0.95, 1.0, 1.05] for p in predictors
+            p: [0.935, 1.0, 1.035] for p in predictors
         }
         ensemble_weights = {
-            p: np.array([0.25, 0.5, 0.25]) for p in predictors
+            p: np.array([1/3, 1/3, 1/3]) for p in predictors
         }
         
         # Calculate initial volatility (if Close is in predictors)
@@ -894,10 +504,10 @@ class StockPredictor:
                     if recent_trend > 0:
                         # Uptrend - allow more upside correction
                         lower = base_lower
-                        upper = base_upper + 0.05
+                        upper = base_upper + 0.1
                     else:
                         # Downtrend - allow more downside correction
-                        lower = base_lower - 0.05
+                        lower = base_lower - 0.1
                         upper = base_upper
                 else:
                     lower, upper = base_lower, base_upper
@@ -1296,25 +906,6 @@ class StockPredictor:
                     backtest_array[step, pred_idx] = current_volatility
                     raw_backtest_array[step, pred_idx] = current_volatility
                     
-                # else:
-                #     # Regular predictor - use model
-                #     features = [col for col in predictors if col != predictor]
-                    
-                #     # Prepare input data
-                #     if step == 0:
-                #         pred_input = last_pred_row[features].values
-                #         backtest_input = last_backtest_row[features].values
-                #     else:
-                #         # Use previous predictions as features
-                #         pred_input = np.array([
-                #             pred_array[step-1, predictor_indices[feat]] 
-                #             for feat in features
-                #         ])
-                #         backtest_input = np.array([
-                #             backtest_array[step-1, predictor_indices[feat]]
-                #             for feat in features
-                #         ])
-                # For other predictors (non-MA, non-derived)
                 else:
                     # Regular predictor - use model
                     features = [col for col in predictors if col != predictor]
@@ -1380,17 +971,7 @@ class StockPredictor:
                             
                             pred_input = np.array(pred_inputs)
                             backtest_input = np.array(backtest_inputs)
-                    
-                        
-
-
-
-
-
-
-
-
-
+            
 
                     # Get model predictions
                     model = self.models[predictor][model_type]
@@ -1781,14 +1362,6 @@ class StockPredictor:
 
 
 
-
-
-
-
-
-
-
-
   
     # # DS Code
     # def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
@@ -2118,94 +1691,7 @@ class StockPredictor:
 
     #     return prediction, backtest
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-    # def plot_ridge_alpha_analysis(self, X_train_scaled, y_train, X_test_scaled, y_test):
-    #     """Plot Ridge regression alpha vs RMSE analysis"""
-
-    #     alphas = np.logspace(-6, 4, 600)
-    #     test_rmse = []
-
-    #     for alpha in alphas:
-    #         ridge = Ridge(alpha=alpha, fit_intercept=True)
-    #         ridge.fit(X_train_scaled, y_train)
-    #         rmse = root_mean_squared_error(y_test, ridge.predict(X_test_scaled))
-    #         test_rmse.append(rmse)
-
-    #     plt.figure(figsize=(12, 6))
-    #     plt.plot(
-    #         alphas, test_rmse, label="Ridge regression", color="lime", linestyle="--"
-    #     )
-
-    #     # Find and plot minimum
-    #     i = np.argmin(test_rmse)
-    #     x_min = alphas[i]
-    #     y_min = test_rmse[i]
-    #     plt.plot(x_min, y_min, marker="o")
-
-    #     plt.title("Ridge Regression: Lambda vs Test RMSE")
-    #     plt.xlim(left=0, right=20)
-    #     plt.xlabel("Lambda")
-    #     plt.ylabel("RMSE")
-    #     plt.legend()
-    #     plt.grid(True)
-    #     plt.show()
-
-    #     return x_min, y_min
-
-    # def plot_predictions(self):
-    #     """Plot actual vs predicted values for all models"""
-    #     for feature_name, feature_set in self.feature_sets.items():
-    #         y_test_df = feature_set["y_test_df"]
-    #         plt.figure(figsize=(12, 6))
-    #         plt.plot(y_test_df.index, y_test_df, label="Actual", color="black")
-    #         # self.forecasts[feature_name]['polynomial']
-    #         for model, pred in self.forecasts[feature_name].items():
-    #             if model != "sarima" and model != "knn":
-    #                 plt.plot(
-    #                     y_test_df.iloc[-len(pred) :,].index,
-    #                     pred,
-    #                     label=f"{model}",
-    #                     linestyle="dashed",
-    #                     alpha=0.7,
-    #                 )
-
-    #         plt.title(f"{feature_name} Stock Price Predictions")
-    #         plt.xlabel("Date")
-    #         plt.ylabel("Price")
-    #         plt.legend()
-    #         plt.grid(True)
-    #         plt.show()
-
-    # def print_metrics(self):
-    #     """Print performance metrics for all models"""
-    #     print("\nModel Performance Metrics:")
-    #     print("-" * 50)
-    #     for name, metric in self.metrics.items():
-    #         if isinstance(metric, dict):
-    #             print(f"{name.upper()}:")
-    #             print(f"RMSE: {metric['rmse']:.2f}")
-    #             print(f"R²: {metric['r2']:.2f}")
-    #         else:
-    #             print(f"{name.upper()}:")
-    #             print(f"RMSE: {metric:.2f}")
-    #         print("-" * 50)
-
+ 
     def full_workflow(
         start_date, end_date, predictors=None, companies=None, stock_settings=None
     ):
@@ -2254,7 +1740,7 @@ class StockPredictor:
             predictors = predictors
 
             predictor = prediction_dataset
-            if stock_settings is not None and (len(stock_settings) != 0 or company in stock_settings):
+            if stock_settings is not None and (len(stock_settings) != 0 and company in stock_settings):
                 # Use custom settings for the stock
                 settings = stock_settings[company]
                 horizons = settings["horizons"]

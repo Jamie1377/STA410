@@ -52,6 +52,22 @@ class StockPredictor:
         self.interval = interval
         self.history = []  # New attribute for error correction
 
+    def _compute_rsi(self, window=14):
+        """Custom RSI implementation"""
+        delta = self.data['Close'].diff()
+        gain = delta.where(delta > 0, 0)
+        loss = -delta.where(delta < 0, 0)
+        return 100 - (100 / (1 + (gain.rolling(window).mean() / loss.rolling(window).mean())))
+
+    def _compute_atr(self, window=14):
+        """Average True Range"""
+        high_low = self.data['High'] - self.data['Low']
+        high_close = (self.data['High'] - self.data['Close'].shift()).abs()
+        low_close = (self.data['Low'] - self.data['Close'].shift()).abs()
+        tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        return tr.rolling(window).mean()
+
+
 
     def load_data(self):
         """Load and prepare stock data with features"""
@@ -82,6 +98,31 @@ class StockPredictor:
         # Drop rows with NaN values (due to rolling window)
         self.data.dropna(inplace=True)
         stock_data.index.name = "Date"  # Ensure the index is named "Date"
+
+
+     
+     
+        
+        # Advanced Momentum
+        self.data['RSI'] = self._compute_rsi(window=14)
+        self.data['MACD'] = self.data['Close'].ewm(span=12).mean() - self.data['Close'].ewm(span=26).mean()
+        
+        # Volatility-adjusted Channels
+        self.data['ATR'] = self._compute_atr(window=14)
+        self.data['Upper_Bollinger'] = self.data['MA_50'] + 2*self.data['Close'].rolling(50).std()
+        self.data['Lower_Bollinger'] = self.data['MA_50'] - 2*self.data['Close'].rolling(50).std()
+        
+        # Volume-based Features
+        # self.data['OBV'] = self._compute_obv()
+        self.data['VWAP'] = (self.data['Volume'] * (self.data['High'] + self.data['Low'] + self.data['Close'])/3).cumsum() / self.data['Volume'].cumsum()
+        
+    
+
+
+
+
+
+
 
         # Fetch S&P 500 Index (GSPC) and Treasury Yield ETF (IEF) from Yahoo Finance
         sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date)["Close"]
@@ -1736,7 +1777,8 @@ class StockPredictor:
                     "rolling_ema",
                     "rolling_25p",
                     "rolling_75p",
-                ]
+                ] + ["RSI", "MACD", 'ATR','Upper_Bollinger','Lower_Bollinger'] 
+                     
             predictors = predictors
 
             predictor = prediction_dataset
@@ -1767,8 +1809,8 @@ class StockPredictor:
                 print('MSE of backtest period vs real data',backtest_mape)
                 print('Horizon: ',horizon)
                 print('-----------------------------------------------------------------------------------------------------------')
-                # if backtest_mape > 0.30:
-                #     continue
+                if backtest_mape > 0.30:
+                    continue
 
                 # Data Viz (Not that key)
                 plt.figure(figsize=(12, 6))

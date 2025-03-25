@@ -8,8 +8,8 @@ stock_settings = {
     "GE": {"horizons": [5], "weight": False},
     "ANF": {"horizons": [7, 10], "weight": False},
     "AVGO": {"horizons": [7, 5, 10, 12], "weight": False},
-    "AXP": {"horizons": [5, 10], "weight": False},
-    "NVDA": {"horizons": [3, 5, 10, 15], "weight": False},
+    "AXP": {"horizons": [5, 10, 13], "weight": False},
+    "NVDA": {"horizons": [5, 10, 12], "weight": False},
     "MCO": {"horizons": [3], "weight": False},
     "PYPL": {"horizons": [5], "weight": False},
     "SPGI": {"horizons": [12], "weight": False},
@@ -27,10 +27,11 @@ stock_settings = {
     "MTCH": {"horizons": [10], "weight": False},
     "DINO": {"horizons": [15], "weight": False},
     "XOM": {"horizons": [15], "weight": False},
-    "CVX": {"horizons": [15], "weight": False},
+    "CVX":  {"horizons": [15], "weight": False},
     "COP": {"horizons": [15], "weight": False},
-    "WMB": {"horizons": [15], "weight": False},
+    "WMB":  {"horizons": [15], "weight": False},
     "EPD": {"horizons": [15], "weight": False},
+
 }
 
 print(list(yf.Sector("energy").top_companies.index))
@@ -87,12 +88,10 @@ lis = [
     "PAGP",
 ]
 toc = time.time()
-StockPredictor.full_workflow(
-    "2023-09-01", date.today(), companies=["NVDA"], stock_settings=stock_settings
-)
+StockPredictor.full_workflow("2023-09-01", date.today(), companies=["AXP"], stock_settings=stock_settings)
 tic = time.time()
-tic - toc
-print("Time taken", tic - toc)
+tic-toc
+print('Time taken', tic-toc)
 
 # AAPL 10
 

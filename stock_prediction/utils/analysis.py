@@ -4,6 +4,8 @@ from statsmodels.tsa.stattools import adfuller, acf, pacf
 from statsmodels.stats.outliers_influence import variance_inflation_factor
 from sklearn.ensemble import RandomForestRegressor
 from typing import Tuple
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 
 def calculate_vif(data: pd.DataFrame) -> pd.DataFrame:
@@ -22,6 +24,12 @@ def calculate_vif(data: pd.DataFrame) -> pd.DataFrame:
         variance_inflation_factor(data.values, i) for i in range(data.shape[1])
     ]
     return vif_data.sort_values(by="VIF", ascending=False)
+
+def vizualize_correlation(data: pd.DataFrame):
+    plt.figure(figsize=(20, 20))
+    correlation_mat = data.corr()
+    sns.heatmap(correlation_mat, annot = True, cmap='coolwarm')
+    plt.show()
 
 
 def feature_importance(X: pd.DataFrame, y: pd.Series) -> pd.DataFrame:

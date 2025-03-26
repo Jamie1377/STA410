@@ -245,7 +245,7 @@ class StockPredictor:
         return self
  
  
-    def prepare_models(self, predictors: list[str], horizon, weight: bool = False):
+    def prepare_models(self, predictors: list[str], horizon, weight: bool = False, refit: bool = False):
         """
         Prepare models for each predictor.
 
@@ -253,8 +253,12 @@ class StockPredictor:
         -----------
         predictors : List[str]
             List of predictor column names
-        target_column : str
-            The target column to predict
+        horizon : int
+            Number of days to forecast
+        weight : bool
+            Whether to apply feature weighting
+        refit : bool
+            Whether to refit models on full data
         """
         self.models = {}
         self.scalers = {}
@@ -321,7 +325,7 @@ class StockPredictor:
 
 
             from sklearn.ensemble import RandomForestRegressor, GradientBoostingRegressor
-            from   sklearn.model_selection import cross_val_score
+            from  sklearn.model_selection import cross_val_score
 
             def advanced_feature_weighting(X, y):
                 # Multiple models for feature importance
@@ -422,13 +426,28 @@ class StockPredictor:
                 rmse = root_mean_squared_error(y_test, y_pred)
 
                 print(f"{predictor} - {name.capitalize()} Model:")
-                print(f"  Mean Squared Error: {rmse:.4f}")
+                print(f"  Test  Mean Squared Error: {rmse:.4f}")
                 print(f"  R² Score: {r2:.4f}")
+            print('-----------------------------------------------------------------------------------')
 
             # Store models, scalers, and transformers
             self.models[predictor] = models
             self.scalers[predictor] = scaler
             self.transformers[predictor] = poly
+            
+            if refit is True:
+                # Refit models on full data
+                refit_models =  {
+                    "linear": LinearRegression(),
+                    "ridge": Ridge(alpha=1.0),
+                    "polynomial": Ridge(alpha=1.0),
+                    "arimaxgb": ARIMAXGBoost(),
+                }
+                refit_models["linear"].fit(X, y)
+                refit_models["ridge"].fit(scaler.transform(X), y)
+                refit_models["polynomial"].fit(poly.transform(scaler.transform(X)), y)
+                refit_models["arimaxgb"].fit(X, y)
+                self.models[predictor] = refit_models
 
 
     def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
@@ -460,6 +479,7 @@ class StockPredictor:
         
         # Initialize arrays for storing predictions
         pred_array = np.zeros((horizon, len(predictors)))
+        raw_pred_array = np.zeros((horizon, len(predictors)))
         backtest_array = np.zeros((horizon, len(predictors)))
         raw_backtest_array = np.zeros((horizon, len(predictors)))
         
@@ -701,6 +721,10 @@ class StockPredictor:
                             np.mean(pred_array[max(0, step-horizon):step, predictor_indices[feat]])
                             for feat in close_features
                         ])
+                        raw_pred_input = np.array([
+                            np.mean(raw_pred_array[max(0, step-horizon):step, predictor_indices[feat]])
+                            for feat in close_features
+                        ])
                         backtest_input = np.array([
                             np.mean(backtest_array[max(0, step-horizon):step, predictor_indices[feat]])
                             for feat in close_features
@@ -712,6 +736,7 @@ class StockPredictor:
                     else:
                         # If we don't have enough predictions yet, combine historical and predicted
                         pred_inputs = []
+                        raw_pred_inputs = []
                         backtest_inputs = []
                         raw_backtest_inputs = []
                         
@@ -720,6 +745,7 @@ class StockPredictor:
                             
                             # Get predicted values so far
                             pred_vals = pred_array[:step, feat_idx] if step > 0 else np.array([])
+                            raw_pred_vals = raw_pred_array[:step, feat_idx] if step > 0 else np.array([])
                             backtest_vals = backtest_array[:step, feat_idx] if step > 0 else np.array([])
                             raw_backtest_vals = raw_backtest_array[:step, feat_idx] if step > 0 else np.array([])
                             
@@ -731,7 +757,9 @@ class StockPredictor:
                                 if feat in prediction.columns:
                                     pred_hist = prediction[feat].iloc[-hist_needed:].values
                                     all_pred_vals = np.concatenate([pred_hist, pred_vals])
+                                    raw_all_pred_vals = np.concatenate([pred_hist, raw_pred_vals])
                                     pred_inputs.append(np.mean(all_pred_vals))
+                                    raw_pred_inputs.append(np.mean(raw_all_pred_vals))
                                 else:
                                     pred_inputs.append(0)  # Fallback
                                     
@@ -785,11 +813,13 @@ class StockPredictor:
                     backtest_close = 0.5*(self.data.copy().iloc[-horizon]['Close']  + backtest_close)
                 # Store predictions
                 pred_array[step, close_idx] = pred_close
+                raw_pred_array[step, close_idx] = raw_pred_close
                 backtest_array[step, close_idx] = backtest_close
                 raw_backtest_array[step, close_idx] = raw_backtest_raw_close
 
                 # Store predictions v2 mirror original code
                 pred_array[step, close_idx] = raw_pred_close
+                raw_pred_array[step, close_idx] = raw_pred_close
                 backtest_array[step, close_idx] = raw_backtest_close
                 raw_backtest_array[step, close_idx] = raw_backtest_raw_close
                 
@@ -820,6 +850,7 @@ class StockPredictor:
                     else:
                         # Combine historical with predicted for later steps
                         pred_close_history = pred_array[:step, close_idx]
+                        raw_pred_close_history = raw_pred_array[:step, close_idx]
                         backtest_close_history = backtest_array[:step, close_idx]
                         raw_backtest_close_history = raw_backtest_array[:step, close_idx]
                         
@@ -844,16 +875,19 @@ class StockPredictor:
                     
                     # Get current Close predictions
                     current_pred_close = pred_array[step, close_idx]
+                    current_raw_pred_close = raw_pred_array[step, close_idx]
                     current_backtest_close = backtest_array[step, close_idx]
                     current_raw_close = raw_backtest_array[step, close_idx]
                     
                     # Calculate MA_50 (vectorized)
                     ma50_pred = np.mean(np.append(hist_close_pred, current_pred_close))
+                    ma50_raw_pred = np.mean(np.append(hist_close_pred, current_raw_pred_close))
                     ma50_backtest = np.mean(np.append(hist_close_backtest, current_backtest_close))
                     ma50_raw_backtest = np.mean(np.append(hist_close_raw_backtest, current_raw_close))
                     
                     # Store MA_50 values
                     pred_array[step, pred_idx] = ma50_pred
+                    raw_pred_array[step, pred_idx] = ma50_raw_pred
                     backtest_array[step, pred_idx] = ma50_backtest
                     raw_backtest_array[step, pred_idx] = ma50_raw_backtest
                     
@@ -863,10 +897,12 @@ class StockPredictor:
                     # Similar approach for MA_200
                     if step == 0:
                         hist_close_pred = observation["Close"].values[-199:]
+                        hist_close_raw_pred = observation["Close"].values[-199:]
                         hist_close_backtest = backtest["Close"].values[-199:]
                         hist_close_raw_backtest = backtest["Close"].values[-199:]
                     else:
                         pred_close_history = pred_array[:step, close_idx]
+                        raw_pred_close_history = raw_pred_array[:step, close_idx]
                         backtest_close_history = backtest_array[:step, close_idx]
                         raw_backtest_close_history = raw_backtest_array[:step, close_idx]
                         
@@ -874,6 +910,10 @@ class StockPredictor:
                             hist_close_pred = np.concatenate([
                                 observation["Close"].values[-(199-len(pred_close_history)):],
                                 pred_close_history
+                            ])
+                            hist_close_raw_pred = np.concatenate([
+                                observation["Close"].values[-(199-len(raw_pred_close_history)):],
+                                raw_pred_close_history
                             ])
                             hist_close_backtest = np.concatenate([
                                 backtest["Close"].values[-(199-len(backtest_close_history)):],
@@ -885,18 +925,22 @@ class StockPredictor:
                             ])
                         else:
                             hist_close_pred = pred_close_history[-199:]
+                            hist_close_raw_pred = raw_pred_close_history[-199:]
                             hist_close_backtest = backtest_close_history[-199:]
                             hist_close_raw_backtest = raw_backtest_close_history[-199:]
                     
                     current_pred_close = pred_array[step, close_idx]
+                    current_raw_pred_close = raw_pred_array[step, close_idx]
                     current_backtest_close = backtest_array[step, close_idx]
                     current_raw_backtest_close = raw_backtest_array[step, close_idx]
                     
                     ma200_pred = np.mean(np.append(hist_close_pred, current_pred_close))
+                    ma200_raw_pred = np.mean(np.append(hist_close_raw_pred, current_raw_pred_close))
                     ma200_backtest = np.mean(np.append(hist_close_backtest, current_backtest_close))
                     ma200_raw_backtest = np.mean(np.append(hist_close_raw_backtest, current_raw_backtest_close))
                     
                     pred_array[step, pred_idx] = ma200_pred
+                    raw_pred_array[step, pred_idx] = ma200_raw_pred
                     backtest_array[step, pred_idx] = ma200_backtest
                     raw_backtest_array[step, pred_idx] = ma200_raw_backtest
                     
@@ -907,16 +951,19 @@ class StockPredictor:
                     if step == 0:
                         # Get last actual Close from data
                         prev_close_pred = observation["Close"].values[-1]
+                        prev_close_raw_backtest = observation["Close"].values[-1]
                         prev_close_backtest = backtest["Close"].values[-1]
                         prev_close_raw_backtest = backtest["Close"].values[-1]
                     else:
                         # Use previous predicted Close
                         prev_close_pred = pred_array[step-1, close_idx]
+                        prev_close_raw_pred = raw_pred_array[step-1, close_idx]
                         prev_close_backtest = backtest_array[step-1, close_idx]
                         prev_close_raw_backtest = raw_backtest_array[step-1, close_idx]
                     
                     # Get current predicted Close
                     current_close_pred = pred_array[step, close_idx]
+                    current_close_raw_pred = raw_pred_array[step, close_idx]
                     current_close_backtest = backtest_array[step, close_idx]
                     current_close_raw_backtest = raw_backtest_array[step, close_idx]
                     
@@ -936,14 +983,21 @@ class StockPredictor:
                     else:
                         daily_return_raw_backtest = 0
                     
+                    if prev_close_raw_pred != 0:
+                        daily_return_raw_pred = (current_close_raw_pred / prev_close_raw_pred) - 1
+                    else:
+                        daily_return_raw_pred = 0
+                    
                     # Store daily returns
                     pred_array[step, pred_idx] = daily_return_pred
+                    raw_pred_array[step, pred_idx] = daily_return_raw_pred
                     backtest_array[step, pred_idx] = daily_return_backtest
                     raw_backtest_array[step, pred_idx] = daily_return_raw_backtest
                     
                 elif predictor == "VIX" and "Close" in predictors:
                     # Use current volatility estimate directly
                     pred_array[step, pred_idx] = current_volatility
+                    raw_pred_array[step, pred_idx] = current_volatility
                     backtest_array[step, pred_idx] = current_volatility
                     raw_backtest_array[step, pred_idx] = current_volatility
                     
@@ -1037,9 +1091,11 @@ class StockPredictor:
                     pred_value = raw_pred * predictor_correction
                     backtest_value = raw_backtest * predictor_correction
                     raw_backtest_value = raw_backtest
+                    raw_pred_value = raw_pred
                     
                     # # Store predictions
                     pred_array[step, pred_idx] = pred_value
+                    raw_pred_array[step, pred_idx] = raw_pred_value
                     backtest_array[step, pred_idx] = backtest_value
                     raw_backtest_array[step, pred_idx] = raw_backtest_value
                     
@@ -1106,14 +1162,21 @@ class StockPredictor:
             columns=predictors,
             index=backtest_dates
         )
+
+        raw_prediction_df = pd.DataFrame(
+            raw_pred_array,
+            columns=predictors,
+            index=pred_dates
+        )
         
         
         # Concatenate with original data to include history
         final_prediction = pd.concat([prediction, prediction_df])
+        final_raw_prediction = pd.concat([prediction, raw_prediction_df])
         final_backtest = pd.concat([backtest, backtest_df])
         final_raw_backtest= pd.concat([backtest, raw_backtest_df])
         
-        return final_prediction, final_backtest, final_raw_backtest
+        return final_prediction, final_backtest, final_raw_prediction, final_raw_backtest
 
 
 
@@ -1746,8 +1809,9 @@ class StockPredictor:
         companies (list): The list of company names of the stocks
         stock_settings (dict): The dictionary of the stock settings
         """
-        default_horizons = [5, 7, 10]
+        default_horizons = [5, 10, 15]
         default_weight = False
+        default_refit = True
         if companies is None:
             companies = ["AXP"]
         for company in companies:
@@ -1791,12 +1855,13 @@ class StockPredictor:
                 # Use default settings for other stocks
                 horizons = default_horizons
                 weight = default_weight
+
             for horizon in horizons:
                 prediction_dataset.prepare_models(
-                    predictors, horizon=horizon, weight=weight
+                    predictors, horizon=horizon, weight=weight,refit=default_refit
                 )
                 # prediction_dataset._evaluate_models('Close')
-                prediction, backtest, raw_backtest = (
+                prediction, backtest, raw_prediction, raw_backtest = (      # final_prediction, final_backtest, final_raw_prediction, final_raw_backtest
                     predictor.one_step_forward_forecast(
                         predictors, model_type="arimaxgb", horizon=horizon
                     )
@@ -1808,7 +1873,7 @@ class StockPredictor:
                 backtest_mape = mean_absolute_percentage_error(prediction_dataset.data.Close[prediction_dataset.data.index >= first_day], backtest[backtest.index >= first_day].Close)
                 print('MSE of backtest period vs real data',backtest_mape)
                 print('Horizon: ',horizon)
-                print('-----------------------------------------------------------------------------------------------------------')
+                print('--------------------------------------------------------------------------------------------------------------------------------')
                 if backtest_mape > 0.30:
                     continue
 
@@ -1827,6 +1892,13 @@ class StockPredictor:
                     label="Prediction",
                     color="blue",
                 )
+                plt.plot(raw_prediction[raw_prediction.index >= first_day].index, raw_prediction[raw_prediction.index >= first_day].Close, label="Raw Prediction", color="green")
+
+
+
+
+
+
                 plt.plot(
                     backtest[backtest.index >= first_day].index,
                     backtest[backtest.index >= first_day].Close,
@@ -1851,7 +1923,7 @@ class StockPredictor:
                 )
                 # cursor(hover=True)
                 plt.title(
-                    f"Price Prediction ({prediction_dataset.symbol}) (horizon = {horizon}) (weight = {weight})"
+                    f"Price Prediction ({prediction_dataset.symbol}) (horizon = {horizon}) (weight = {weight}) (refit = {default_refit})"
                 )
                 plt.axvline(
                     x=backtest.index[-1],

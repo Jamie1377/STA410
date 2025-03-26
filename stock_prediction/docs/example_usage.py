@@ -88,7 +88,8 @@ lis = [
     "PAGP",
 ]
 toc = time.time()
-StockPredictor.full_workflow("2023-09-01", date.today(), companies=["AXP"], stock_settings=stock_settings)
+StockPredictor.full_workflow("2023-09-01", date.today(), companies=[   
+    "OVV"], stock_settings=stock_settings)
 tic = time.time()
 tic-toc
 print('Time taken', tic-toc)

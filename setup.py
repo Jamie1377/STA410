@@ -14,6 +14,7 @@ setup(
         "lightgbm",
         "catboost",
         "matplotlib",
+        "seaborn",
         "pandas-market-calendars",
         "pandas_market_calendars",
         "mplcursors",

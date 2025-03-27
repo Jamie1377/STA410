@@ -15,7 +15,7 @@ stock_settings = {
     "SPGI": {"horizons": [12], "weight": False},
     "AAPL": {"horizons": [3, 5, 7, 10], "weight": False},
     "ORCL": {"horizons": [3, 7], "weight": False},
-    "LCID": {"horizons": [5, 7, 10, 12], "weight": False},
+    "LCID": {"horizons": [30], "weight": False},
     "c": {"horizons": [10, 15], "weight": False},
     "KDP": {"horizons": [3, 5, 12], "weight": False},
     "SBUX": {"horizons": [5, 10, 15], "weight": False},
@@ -88,7 +88,7 @@ lis = [
     "PAGP",
 ]
 toc = time.time()
-StockPredictor.full_workflow("2023-11-01", date.today(), companies=["LCID"] , stock_settings=stock_settings)
+StockPredictor.full_workflow("2024-01-01", date.today(), companies=["LCID"] , stock_settings=stock_settings)
 tic = time.time()
 tic-toc
 print('Time taken', tic-toc)

@@ -26,7 +26,7 @@ def calculate_vif(data: pd.DataFrame) -> pd.DataFrame:
     return vif_data.sort_values(by="VIF", ascending=False)
 
 def vizualize_correlation(data: pd.DataFrame):
-    plt.figure(figsize=(20, 20))
+    plt.figure(figsize=(30, 30))
     correlation_mat = data.corr()
     sns.heatmap(correlation_mat, annot = True, cmap='coolwarm')
     plt.show()

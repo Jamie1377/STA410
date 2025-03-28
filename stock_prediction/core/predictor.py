@@ -2,7 +2,7 @@ import yfinance as yf
 import pandas as pd
 import numpy as np
 from datetime import date, timedelta
-from sklearn.metrics import root_mean_squared_error, mean_absolute_percentage_error
+from sklearn.metrics import root_mean_squared_error, mean_absolute_percentage_error, r2_score
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
 from sklearn.linear_model import LinearRegression, Ridge
@@ -72,6 +72,9 @@ class StockPredictor:
 
     def load_data(self):
         """Load and prepare stock data with features"""
+            
+        # Add momentum-specific features
+        window = 15  # Standard momentum window
         self.data = yf.download(
             self.symbol,
             start=self.start_date,
@@ -107,6 +110,24 @@ class StockPredictor:
             self.data["Close"].ewm(span=12).mean()
             - self.data["Close"].ewm(span=26).mean()
         )
+        # 2. Williams %R
+        high_max = self.data['High'].rolling(window).max()
+        low_min = self.data['Low'].rolling(window).min()
+        self.data['Williams_%R'] = ((high_max - self.data['Close']) / 
+                                (high_max - low_min)) * -100
+
+             
+        # 3. Stochastic Oscillator
+        self.data['Stochastic_%K'] = ((self.data['Close'] - low_min) / 
+                                    (high_max - low_min)) * 100
+        self.data['Stochastic_%D'] = self.data['Stochastic_%K'].rolling(3).mean()
+
+        # 4. Momentum Divergence Detection
+        self.data['Price_Change'] = self.data['Close'].diff()
+        self.data['Momentum_Divergence'] = (self.data['Price_Change'] * 
+                                        self.data['MACD'].diff()).rolling(5).sum()
+        
+       
 
         # Volatility-adjusted Channels
         self.data["ATR"] = self._compute_atr(window=14)
@@ -125,6 +146,7 @@ class StockPredictor:
             / 3
         ).cumsum() / self.data["Volume"].cumsum()
 
+        # Economic Indicators
         # Fetch S&P 500 Index (GSPC) and Treasury Yield ETF (IEF) from Yahoo Finance
         sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date)["Close"]
         tnx = yf.download(
@@ -189,59 +211,66 @@ class StockPredictor:
         )
 
         self.data = pd.merge(self.data, economic_data, on="Date", how="left")
-        self.data["Daily Returns"] = self.data["Close"].pct_change()
+        # self.data["Daily Returns"] = self.data["Close"].pct_change()
+        self.data["Daily Returns"] = self.data["Close"].pct_change(window) * 100 # Percentage change in the standard window for the momentum
         self.data["Volatility"] = self.data["Daily Returns"].rolling(window=20).std()
+         # 5. Adaptive Momentum Score
+        vol_weight = self.data['Volatility'] * 100
+        self.data['Momentum_Score'] = (self.data['RSI'] * 0.4 + 
+                                    self.data['Daily Returns'] * 0.3 + 
+                                    self.data['Williams_%R'] * 0.3) / (1 + vol_weight)
+        # Drop rows with NaN values
         self.data = self.data.dropna()
 
         # Process each feature set
-        for name, config in self.feature_sets.items():
-            target = config["target"]
-            X = self.data.drop(columns=[target]).values
-            y = self.data[target].values
+        # for name, config in self.feature_sets.items():
+        #     target = config["target"]
+        #     X = self.data.drop(columns=[target]).values
+        #     y = self.data[target].values
 
-            X_df = self.data.drop(columns=[target])
-            y_df = self.data[target]
+        #     X_df = self.data.drop(columns=[target])
+        #     y_df = self.data[target]
 
-            # Train test split
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, shuffle=False, random_state=42
-            )
+        #     # Train test split
+        #     X_train, X_test, y_train, y_test = train_test_split(
+        #         X, y, test_size=0.2, shuffle=False, random_state=42
+        #     )
 
-            self.X_train_df, self.X_test_df, self.y_train_df, self.y_test_df = (
-                train_test_split(
-                    X_df, y_df, test_size=0.2, shuffle=False, random_state=42
-                )
-            )
+        #     self.X_train_df, self.X_test_df, self.y_train_df, self.y_test_df = (
+        #         train_test_split(
+        #             X_df, y_df, test_size=0.2, shuffle=False, random_state=42
+        #         )
+        #     )
 
-            # Scale features
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
+        #     # Scale features
+        #     scaler = StandardScaler()
+        #     X_train_scaled = scaler.fit_transform(X_train)
+        #     X_test_scaled = scaler.transform(X_test)
 
-            # Polynomial features
-            transformer = PolynomialFeatures(degree=2, include_bias=False)
-            X_train_poly = transformer.fit_transform(X_train_scaled)
-            X_test_poly = transformer.transform(X_test_scaled)
+        #     # Polynomial features
+        #     transformer = PolynomialFeatures(degree=2, include_bias=False)
+        #     X_train_poly = transformer.fit_transform(X_train_scaled)
+        #     X_test_poly = transformer.transform(X_test_scaled)
 
-            # Store transformed data
-            self.feature_sets[name].update(
-                {
-                    "X_train": X_train,
-                    "X_test": X_test,
-                    "y_train": y_train,
-                    "y_test": y_test,
-                    "X_train_df": self.X_train_df,
-                    "X_test_df": self.X_test_df,
-                    "y_train_df": self.y_train_df,
-                    "y_test_df": self.y_test_df,
-                    "X_train_scaled": X_train_scaled,
-                    "X_test_scaled": X_test_scaled,
-                    "X_train_poly": X_train_poly,
-                    "X_test_poly": X_test_poly,
-                }
-            )
-            self.scalers[name] = scaler
-            self.transformers[name] = transformer
+        #     # Store transformed data
+        #     self.feature_sets[name].update(
+        #         {
+        #             "X_train": X_train,
+        #             "X_test": X_test,
+        #             "y_train": y_train,
+        #             "y_test": y_test,
+        #             "X_train_df": self.X_train_df,
+        #             "X_test_df": self.X_test_df,
+        #             "y_train_df": self.y_train_df,
+        #             "y_test_df": self.y_test_df,
+        #             "X_train_scaled": X_train_scaled,
+        #             "X_test_scaled": X_test_scaled,
+        #             "X_train_poly": X_train_poly,
+        #             "X_test_poly": X_test_poly,
+        #         }
+        #     )
+        #     self.scalers[name] = scaler
+        #     self.transformers[name] = transformer
 
         return self
 
@@ -294,7 +323,7 @@ class StockPredictor:
             models = {
                 "linear": LinearRegression(),
                 "ridge": Ridge(alpha=1.0),
-                "polynomial": Ridge(alpha=1.0),
+                "polynomial": LinearRegression(),
                 "arimaxgb": ARIMAXGBoost(),
             }
 
@@ -410,19 +439,22 @@ class StockPredictor:
 
                 if name == "linear":
                     y_pred = model.predict(X_test)
-                    r2 = r2 = 1 - (1 - model.score(X_test, y_test))
+                    r2 = 1 - (1 - model.score(X_test, y_test))
                 elif name == "ridge":
                     y_pred = model.predict(scaler.transform(X_test))
-                    r2 = r2 = 1 - (1 - model.score(X_test_scaled, y_test))
+                    r2 = 1 - (1 - model.score(X_test_scaled, y_test))
                 elif name == "polynomial":
                     y_pred = model.predict(poly.transform(scaler.transform(X_test)))
-                    r2 = r2 = 1 - (1 - model.score(X_test_poly, y_test))
+                    r2 = 1 - (1 - model.score(X_test_poly, y_test))
+                elif name == "arimaxgb":
+                    y_pred = model.predict(X_test)
+                    r2 = r2_score(y_test, y_pred)
 
                 # Compute metrics
                 rmse = root_mean_squared_error(y_test, y_pred)
 
                 print(f"{predictor} - {name.capitalize()} Model:")
-                print(f"  Test  Mean Squared Error: {rmse:.4f}")
+                print(f"  Test Mean Squared Error: {rmse:.4f}")
                 print(f"  R² Score: {r2:.4f}")
             print(
                 "-----------------------------------------------------------------------------------------"
@@ -438,7 +470,7 @@ class StockPredictor:
                 refit_models = {
                     "linear": LinearRegression(),
                     "ridge": Ridge(alpha=1.0),
-                    "polynomial": Ridge(alpha=1.0),
+                    "polynomial": LinearRegression(), #Ridge(alpha=1.0),
                     "arimaxgb": ARIMAXGBoost(),
                 }
                 refit_models["linear"].fit(X, y)
@@ -1953,7 +1985,7 @@ class StockPredictor:
     #     return prediction, backtest
 
     def full_workflow(
-        start_date, end_date, predictors=None, companies=None, stock_settings=None
+        start_date, end_date, predictors=None, companies=None, stock_settings=None, model = None
     ):
         """
         This function is used to output the prediction of the stock price for the future based on the stock price data from the start date to the end date.
@@ -1968,6 +2000,7 @@ class StockPredictor:
         default_horizons = [5, 10, 15]
         default_weight = False
         default_refit = True
+        default_model = "arimaxgb"
         if companies is None:
             companies = ["AXP"]
         for company in companies:
@@ -2000,7 +2033,15 @@ class StockPredictor:
                         "rolling_25p",
                         "rolling_75p",
                     ]
-                    + ["RSI", "MACD", "ATR", "Upper_Bollinger", "Lower_Bollinger"]
+                    + [
+                        # "RSI",
+                        "MACD", "ATR", "Upper_Bollinger", "Lower_Bollinger"] +
+                    [
+                        # 'Daily Returns', 
+                        # 'Williams_%R',
+                        'Stochastic_%K', 'Stochastic_%D', 
+                        'Momentum_Score'
+                    ]
                 )
 
             predictors = predictors
@@ -2023,13 +2064,17 @@ class StockPredictor:
                     predictors, horizon=horizon, weight=weight, refit=default_refit
                 )
                 # prediction_dataset._evaluate_models('Close')
+                if model is None:
+                    pred_model = default_model
+                else:
+                    pred_model = model
                 (
                     prediction,
                     backtest,
                     raw_prediction,
                     raw_backtest,
                 ) = predictor.one_step_forward_forecast(  # final_prediction, final_backtest, final_raw_prediction, final_raw_backtest
-                    predictors, model_type="arimaxgb", horizon=horizon
+                    predictors, model_type=pred_model, horizon=horizon
                 )
                 # print(prediction)
                 # print(backtest)
@@ -2049,7 +2094,7 @@ class StockPredictor:
                     "--------------------------------------------------------------------------------------------------------------------------------"
                 )
                 if horizon <= 20:
-                    if backtest_mape > 0.10:
+                    if backtest_mape > 0.15:
                         continue
                 else:
                     if backtest_mape > 0.30:
@@ -2101,7 +2146,7 @@ class StockPredictor:
                 )
                 # cursor(hover=True)
                 plt.title(
-                    f"Price Prediction ({prediction_dataset.symbol}) (horizon = {horizon}) (weight = {weight}) (refit = {default_refit})"
+                    f"Price Prediction ({prediction_dataset.symbol}) (horizon = {horizon}) (weight = {weight}) (refit = {default_refit}) (model = {pred_model})"
                 )
                 plt.axvline(
                     x=backtest.index[-1],

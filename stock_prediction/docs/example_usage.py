@@ -1,4 +1,5 @@
 from stock_prediction.core import StockPredictor
+from stock_prediction.utils.analysis import vizualize_correlation
 from datetime import date
 import time
 import yfinance as yf
@@ -9,7 +10,7 @@ stock_settings = {
     "ANF": {"horizons": [7, 10], "weight": False},
     "AVGO": {"horizons": [7, 5, 10, 12], "weight": False},
     "AXP": {"horizons": [5, 10, 13], "weight": False},
-    "NVDA": {"horizons": [5, 10, 12], "weight": False},
+    "NVDA": {"horizons": [5, 10, 12, 15], "weight": False},
     "MCO": {"horizons": [3], "weight": False},
     "PYPL": {"horizons": [5], "weight": False},
     "SPGI": {"horizons": [12], "weight": False},
@@ -31,6 +32,10 @@ stock_settings = {
     "COP": {"horizons": [15], "weight": False},
     "WMB":  {"horizons": [15], "weight": False},
     "EPD": {"horizons": [15], "weight": False},
+    "EOG": {"horizons": [15], "weight": False},
+    "CVX": {"horizons": [15], "weight": False},
+    "MTDR": {"horizons": [5, 10 , 15], "weight": False},
+    "CHRD": {"horizons": [5, 10 , 15], "weight": False},
 
 }
 
@@ -84,11 +89,10 @@ lis = [
     "NOV",
     "CRK",
     "CHX",
-    "LB",
     "PAGP",
 ]
 toc = time.time()
-StockPredictor.full_workflow("2024-01-01", date.today(), companies=["LCID"] , stock_settings=stock_settings)
+StockPredictor.full_workflow("2024-01-01", date.today(), companies=["EPD","EOG"],stock_settings=stock_settings,model="arimaxgb")
 tic = time.time()
 tic-toc
 print('Time taken', tic-toc)
@@ -101,49 +105,18 @@ print('Time taken', tic-toc)
 #                 end_date= date.today(),
 #                 interval="1d",)
 # prediction_dataset.load_data()
-# predictor = prediction_dataset
-# for horizon in [5]:
-#     prediction_dataset.prepare_models(predictors= [
-#                     "Close",
-#                     "MA_50",
-#                     "MA_200",
-#                     "SP500",
-#                     "TNX",
-#                     "USDCAD=X",
-#                     "Tech",
-#                     "Fin",
-#                     "VIX",
-#                 ] + [
-#                     "rolling_min",
-#                     "rolling_median",
-#                     "rolling_sum",
-#                     "rolling_ema",
-#                     "rolling_25p",
-#                     "rolling_75p",
-#                 ], horizon=horizon, weight=False)
-# prediction, backtest, backtest2 = (predictor.one_step_forward_forecast(
-#                         [
-#                     "Close",
-#                     "MA_50",
-#                     "MA_200",
-#                     "SP500",
-#                     "TNX",
-#                     "USDCAD=X",
-#                     "Tech",
-#                     "Fin",
-#                     "VIX",
-#                 ] + [
-#                     "rolling_min",
-#                     "rolling_median",
-#                     "rolling_sum",
-#                     "rolling_ema",
-#                     "rolling_25p",
-#                     "rolling_75p",
-#                 ], model_type="arimaxgb", horizon=horizon
-#                     )
-#                 )
-# print(prediction)
-# print(backtest)
 
-# print(prediction_dataset.data.head())
-# print(prediction_dataset.data.iloc[-10:,].mean(axis=0))
+
+# vizualize_correlation(prediction_dataset.data)
+# # print(prediction_dataset.data.head())
+# # print(prediction_dataset.data.columns)
+# # predictor = prediction_dataset
+# # for horizon in [5]:
+# #     prediction_dataset.prepare_models( horizon=horizon, weight=False, refit=True)
+# # prediction, backtest, prediction2, backtest2 = (predictor.one_step_forward_forecast(
+# #     model_type="arimaxgb", horizon=horizon )
+# #                 )
+# # print(prediction)
+# # print(backtest)
+# # print(prediction_dataset.data.head())
+# # print(prediction_dataset.data.iloc[-10:,].mean(axis=0))

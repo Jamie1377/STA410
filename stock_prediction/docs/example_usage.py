@@ -31,9 +31,9 @@ stock_settings = {
     "CVX":  {"horizons": [15], "weight": False},
     "COP": {"horizons": [15], "weight": False},
     "WMB":  {"horizons": [15], "weight": False},
-    "EPD": {"horizons": [15], "weight": False},
-    "EOG": {"horizons": [15], "weight": False},
-    "CVX": {"horizons": [15], "weight": False},
+    "EPD": {"horizons": [10, 15], "weight": False},
+    "EOG": {"horizons": [10, 15], "weight": False},
+    "CVX": {"horizons": [10], "weight": False},
     "MTDR": {"horizons": [5, 10 , 15], "weight": False},
     "CHRD": {"horizons": [5, 10 , 15], "weight": False},
 
@@ -92,7 +92,7 @@ lis = [
     "PAGP",
 ]
 toc = time.time()
-StockPredictor.full_workflow("2024-01-01", date.today(), companies=["EPD","EOG"],stock_settings=stock_settings,model="arimaxgb")
+StockPredictor.full_workflow("2024-01-01", date.today(), companies=["CVX"],stock_settings=stock_settings,model="arimaxgb")
 tic = time.time()
 tic-toc
 print('Time taken', tic-toc)

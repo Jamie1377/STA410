@@ -26,17 +26,17 @@ stock_settings = {
     "TMUS": {"horizons": [10], "weight": False},
     "ASML": {"horizons": [10], "weight": False},
     "MTCH": {"horizons": [10], "weight": False},
-    "DINO": {"horizons": [15], "weight": False},
-    "XOM": {"horizons": [15], "weight": False},
-    "CVX":  {"horizons": [15], "weight": False},
+    "DINO": {"horizons": [10], "weight": False},
+    "XOM": {"horizons": [10], "weight": False},
+    "CVX": {"horizons": [15], "weight": False},
     "COP": {"horizons": [15], "weight": False},
-    "WMB":  {"horizons": [15], "weight": False},
+    "WMB": {"horizons": [15], "weight": False},
     "EPD": {"horizons": [10, 15], "weight": False},
     "EOG": {"horizons": [10, 15], "weight": False},
     "CVX": {"horizons": [10], "weight": False},
-    "MTDR": {"horizons": [5, 10 , 15], "weight": False},
-    "CHRD": {"horizons": [5, 10 , 15], "weight": False},
-
+    "MTDR": {"horizons": [5, 10, 15], "weight": False},
+    "CHRD": {"horizons": [5, 10, 15], "weight": False},
+    "CHX": {"horizons": [15], "weight": False},
 }
 
 print(list(yf.Sector("energy").top_companies.index))
@@ -92,10 +92,16 @@ lis = [
     "PAGP",
 ]
 toc = time.time()
-StockPredictor.full_workflow("2024-01-01", date.today(), companies=["CVX"],stock_settings=stock_settings,model="arimaxgb")
+StockPredictor.full_workflow(
+    "2024-01-01",
+    date.today(),
+    companies=["DTM"],
+    stock_settings=stock_settings,
+    model="linear",
+)
 tic = time.time()
-tic-toc
-print('Time taken', tic-toc)
+tic - toc
+print("Time taken", tic - toc)
 
 # AAPL 10
 
@@ -105,18 +111,18 @@ print('Time taken', tic-toc)
 #                 end_date= date.today(),
 #                 interval="1d",)
 # prediction_dataset.load_data()
-
+# print(prediction_dataset.data[["RSI", "MACD", "Momentum_Score"]].tail(10))
 
 # vizualize_correlation(prediction_dataset.data)
-# # print(prediction_dataset.data.head())
-# # print(prediction_dataset.data.columns)
-# # predictor = prediction_dataset
-# # for horizon in [5]:
-# #     prediction_dataset.prepare_models( horizon=horizon, weight=False, refit=True)
-# # prediction, backtest, prediction2, backtest2 = (predictor.one_step_forward_forecast(
-# #     model_type="arimaxgb", horizon=horizon )
-# #                 )
-# # print(prediction)
-# # print(backtest)
-# # print(prediction_dataset.data.head())
-# # print(prediction_dataset.data.iloc[-10:,].mean(axis=0))
+# print(prediction_dataset.data.head())
+# print(prediction_dataset.data.columns)
+# predictor = prediction_dataset
+# for horizon in [5]:
+#     prediction_dataset.prepare_models( horizon=horizon, weight=False, refit=True)
+# prediction, backtest, prediction2, backtest2 = (predictor.one_step_forward_forecast(
+#     model_type="arimaxgb", horizon=horizon )
+#                 )
+# print(prediction)
+# print(backtest)
+# print(prediction_dataset.data.head())
+# print(prediction_dataset.data.iloc[-10:,].mean(axis=0))

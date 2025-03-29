@@ -255,9 +255,9 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
             n_iter=2000, lr=0.1, alpha=0.01, l1_ratio=0.01, momentum=0.75
         )
         self.sgd_model = GradientDescentRegressor(n_iter=2000, lr=0.01, batch_size=32)
-        self.lgbm_model = LGBMRegressor(n_jobs=-1, verbosity=-1)
+        self.lgbm_model = LGBMRegressor(n_jobs=-1, verbosity=-1, scale_pos_weight= 2, loss_function="Logloss")
         self.catboost_model = CatBoostRegressor(
-            iterations=500, learning_rate=0.1, depth=6, verbose=0
+            iterations=500, learning_rate=0.1, depth=6, verbose=0, loss_function= 'Huber:delta=1.5'
         )
 
     # def fit(self, X, y):

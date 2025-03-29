@@ -326,6 +326,8 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
             # )
             # self.arima_model_fit = self.arima_model
             self.arima_model = SARIMAX(y, order=(0, 1, 4), seasonal_order=(2, 1, 2, 6))
+            self.arima_model.initialize_approximate_diffuse() # this line
+
             self.arima_model_fit = self.arima_model.fit(disp=False, maxiter=200)
         except Exception as e:
             print(f"ARIMA failed: {str(e)}")
@@ -355,10 +357,16 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
 
         Returns:
         - Final predictions combining ARIMA and XGBoost.
-        """
+        """ 
         # Validate and clean input
         X = np.asarray(X, dtype=np.float64)
         X = np.nan_to_num(X, nan=0.0, posinf=1e5, neginf=-1e5)
+
+        # Add momentum regime detection
+        momentum_threshold = 65  # RSI-based threshold
+        momentum_regime = np.where(X[:,-10] > momentum_threshold,  # 'RSI' index
+                                0.1,  # Strong upward momentum
+                                -0.1) # Weak/downward momentum
 
         if self.scaler is None:
             raise RuntimeError("Model not fitted yet")
@@ -399,14 +407,24 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         #     0.05 * lgbm_pred +
         #     0.05 * catboost_pred
         # )
+        # predictions = (
+        #     0.20 * arima_pred  # Reduce ARIMA dominance
+        #     + 0.10
+        #     * (hwes_forecast * 0.6 + ses2_forecast * 0.4)  # Weight HWES more than SES2
+        #     + 0.70 * (gd_pred * 0.8 + sgd_pred * 0.2)  # Favor GD over SGD
+        #     + 0.05 * lgbm_pred  # Boost residual correction
+        #     + 0.05 * catboost_pred  # Balance categorical handling
+        # )
+
+        # Modify predictions based on momentum regime
         predictions = (
-            0.20 * arima_pred  # Reduce ARIMA dominance
-            + 0.10
-            * (hwes_forecast * 0.6 + ses2_forecast * 0.4)  # Weight HWES more than SES2
-            + 0.70 * (gd_pred * 0.8 + sgd_pred * 0.2)  # Favor GD over SGD
-            + 0.05 * lgbm_pred  # Boost residual correction
-            + 0.05 * catboost_pred  # Balance categorical handling
+            0.20 * arima_pred * (1 + 0.01 * momentum_regime) +
+            0.10 * (hwes_forecast * 0.6 + ses2_forecast * 0.4) +
+            0.70 * (gd_pred * 0.8 + sgd_pred * 0.2) * (1 + 0.01 * momentum_regime) +
+            0.05 * lgbm_pred +
+            0.05 * catboost_pred
         )
+
 
         # Final sanitization
         return np.nan_to_num(predictions, nan=np.nanmean(predictions))

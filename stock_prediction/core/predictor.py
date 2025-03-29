@@ -220,6 +220,11 @@ class StockPredictor:
                                     self.data['Daily Returns'] * 0.3 + 
                                     self.data['Williams_%R'] * 0.3) / (1 + vol_weight)
         # Drop rows with NaN values
+        self.data['Momentum_Interaction'] = self.data['RSI'] * self.data['Daily Returns']
+        self.data['Volatility_Adj_Momentum'] = self.data['Momentum_Score'] / (1 + self.data['Volatility'])
+        self.data['Volatility_Adj_Momentum'] = self.data['Volatility_Adj_Momentum'].clip(lower=0.1)
+        self.data['Volatility_Adj_Momentum'] = self.data['Volatility_Adj_Momentum'].clip(upper=10.0)
+        self.data['Volatility_Adj_Momentum'] = self.data['Volatility_Adj_Momentum'].fillna(0.0)
         self.data = self.data.dropna()
 
         # Process each feature set
@@ -275,7 +280,7 @@ class StockPredictor:
         return self
 
     def prepare_models(
-        self, predictors: list[str], horizon, weight: bool = False, refit: bool = False
+        self, predictors: list[str], horizon, weight: bool = False, refit: bool = True
     ):
         """
         Prepare models for each predictor.
@@ -439,16 +444,17 @@ class StockPredictor:
 
                 if name == "linear":
                     y_pred = model.predict(X_test)
-                    r2 = 1 - (1 - model.score(X_test, y_test))
+                       # 1 - (1 - model.score(X_test, y_test))
                 elif name == "ridge":
                     y_pred = model.predict(scaler.transform(X_test))
-                    r2 = 1 - (1 - model.score(X_test_scaled, y_test))
+                       # 1 - (1 - model.score(X_test_scaled, y_test))
                 elif name == "polynomial":
                     y_pred = model.predict(poly.transform(scaler.transform(X_test)))
-                    r2 = 1 - (1 - model.score(X_test_poly, y_test))
+                       # 1 - (1 - model.score(X_test_poly, y_test))
                 elif name == "arimaxgb":
                     y_pred = model.predict(X_test)
-                    r2 = r2_score(y_test, y_pred)
+                
+                r2 = r2_score(y_test, y_pred)
 
                 # Compute metrics
                 rmse = root_mean_squared_error(y_test, y_pred)
@@ -2034,11 +2040,13 @@ class StockPredictor:
                         "rolling_75p",
                     ]
                     + [
-                        # "RSI",
+                        "RSI",
                         "MACD", "ATR", "Upper_Bollinger", "Lower_Bollinger"] +
-                    [
+                    [   # "Volatility"
                         # 'Daily Returns', 
                         # 'Williams_%R',
+                        "Momentum_Interaction",
+                        "Volatility_Adj_Momentum",
                         'Stochastic_%K', 'Stochastic_%D', 
                         'Momentum_Score'
                     ]

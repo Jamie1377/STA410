@@ -87,6 +87,38 @@ class StockPredictor:
         # Add technical indicators
         self.data["MA_50"] = self.data["Close"].rolling(window=50).mean()
         self.data["MA_200"] = self.data["Close"].rolling(window=200).mean()
+        self.data["MA_7"] = self.data["Close"].rolling(window=7).mean()
+        self.data["MA_21"] = self.data["Close"].rolling(window=21).mean()
+
+
+        # Fourier transform
+        data_FT = self.data.copy().reset_index()[["Date",'Close']]
+        close_fft = np.fft.fft(np.asarray(data_FT['Close'].tolist()))
+        # fft_df = pd.DataFrame({'fft': close_fft})
+        # fft_df['absolute'] = fft_df['fft'].apply(lambda x: np.abs(x))
+        # fft_df['angle'] = fft_df['fft'].apply(lambda x: np.angle(x))
+        # fft_list = np.asarray(fft_df['fft'].tolist())
+        # for num_ in [3, 6, 9, 100]:
+        #     fft_list_m10 = np.copy(fft_list)
+        #     fft_list_m10[num_:-num_] = 0  
+        #     complex_num = np.fft.ifft(fft_list_m10)
+        #     self.data[f'Fourier_trans_{num_}_comp_real'] = np.real(complex_num)
+        #     self.data[f'Fourier_trans_{num_}_comp_img'] = np.imag(complex_num)
+
+
+        from sklearn.decomposition import PCA
+
+        X_fft = np.column_stack([np.real(close_fft), np.imag(close_fft)])
+        pca = PCA(n_components=2)  # Keep top 2 components
+        X_pca = pca.fit_transform(X_fft)
+
+        for i in range(X_pca.shape[1]):
+            self.data[f'Fourier_PCA_{i}'] = X_pca[:, i]
+
+                    
+
+
+
         # Add rolling statistics
         self.data["rolling_std"] = self.data["Close"].rolling(window=50).std()
         self.data["rolling_min"] = self.data["Close"].rolling(window=50).min()
@@ -132,10 +164,10 @@ class StockPredictor:
         # Volatility-adjusted Channels
         self.data["ATR"] = self._compute_atr(window=14)
         self.data["Upper_Bollinger"] = (
-            self.data["MA_50"] + 2 * self.data["Close"].rolling(50).std()
+            self.data["MA_21"] + 2 * self.data["Close"].rolling(50).std()
         )
         self.data["Lower_Bollinger"] = (
-            self.data["MA_50"] - 2 * self.data["Close"].rolling(50).std()
+            self.data["MA_21"] - 2 * self.data["Close"].rolling(50).std()
         )
 
         # Volume-based Features
@@ -145,10 +177,10 @@ class StockPredictor:
             * (self.data["High"] + self.data["Low"] + self.data["Close"])
             / 3
         ).cumsum() / self.data["Volume"].cumsum()
-
+        sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date)["Close"]
         # Economic Indicators
         # Fetch S&P 500 Index (GSPC) and Treasury Yield ETF (IEF) from Yahoo Finance
-        sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date)["Close"]
+        sp500 = sp500 - sp500.mean()
         tnx = yf.download(
             "^TNX", start=self.start_date, end=self.end_date, interval=self.interval
         )["Close"]
@@ -2022,14 +2054,29 @@ class StockPredictor:
                 predictors = (
                     [
                         "Close",
-                        "MA_50",
-                        "MA_200",
+                        # "MA_50",
+                        # "MA_200",
+                        "MA_7",
+                        "MA_21",
                         "SP500",
                         "TNX",
                         "USDCAD=X",
                         "Tech",
                         "Fin",
                         "VIX",
+                        # 'Fourier_trans_3_comp_real',
+                        # 'Fourier_trans_6_comp_real',
+                        # 'Fourier_trans_9_comp_real',
+                        # 'Fourier_trans_100_comp_real',
+                        # 'Fourier_trans_3_comp_img',
+                        # 'Fourier_trans_6_comp_img',
+                        # 'Fourier_trans_9_comp_img',
+                        # 'Fourier_trans_100_comp_img',
+
+                        "Fourier_PCA_0",
+                        "Fourier_PCA_1"
+
+
                     ]
                     + [
                         "rolling_min",
@@ -2099,7 +2146,7 @@ class StockPredictor:
                 print("MSE of backtest period vs real data", backtest_mape)
                 print("Horizon: ", horizon)
                 print(
-                    "--------------------------------------------------------------------------------------------------------------------------------"
+                    "------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------"
                 )
                 if horizon <= 20:
                     if backtest_mape > 0.15:

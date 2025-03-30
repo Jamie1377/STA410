@@ -96,9 +96,10 @@ toc = time.time()
 StockPredictor.full_workflow(
     "2024-01-01",
     date.today(),
-    companies=["NVDA"],
+    companies=["DTM"],
     stock_settings=stock_settings,
     model="arimaxgb",
+
 )
 tic = time.time()
 tic - toc
@@ -107,12 +108,13 @@ print("Time taken", tic - toc)
 # AAPL 10
 
 # prediction_dataset = StockPredictor(
-#                 "SPGI",
+#                 "CHRD",
 #                 start_date="2024-01-01",
 #                 end_date= date.today(),
 #                 interval="1d",)
 # prediction_dataset.load_data()
-# print(prediction_dataset.data[["RSI", "MACD", "Momentum_Score"]].tail(10))
+# print(prediction_dataset.data)
+# # print(prediction_dataset.data[["RSI", "MACD", "Momentum_Score"]].tail(10))
 
 # vizualize_correlation(prediction_dataset.data)
 # print(prediction_dataset.data.head())

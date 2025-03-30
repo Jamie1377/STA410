@@ -7,29 +7,17 @@ from sklearn.ensemble import (
     RandomForestRegressor,
     GradientBoostingRegressor,
 )
-from xgboost import XGBRegressor
-from lightgbm import LGBMRegressor
-from catboost import CatBoostRegressor
-from sklearn.metrics import mean_squared_error
-import numpy as np
-from statsmodels.tsa.holtwinters import ExponentialSmoothing, SimpleExpSmoothing
-
-from sklearn.base import BaseEstimator, RegressorMixin
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-from sklearn.svm import SVR
-from sklearn.linear_model import Lasso, LinearRegression
-from sklearn.ensemble import (
-    StackingRegressor,
-    RandomForestRegressor,
-    GradientBoostingRegressor,
-)
-from xgboost import XGBRegressor
-from lightgbm import LGBMRegressor
-from catboost import CatBoostRegressor
-from sklearn.metrics import mean_squared_error
-import numpy as np
-from statsmodels.tsa.holtwinters import ExponentialSmoothing, SimpleExpSmoothing
+from sklearn.metrics import root_mean_squared_error
 from sklearn.preprocessing import StandardScaler
+
+# Boosting Models
+from xgboost import XGBRegressor
+from lightgbm import LGBMRegressor
+from catboost import CatBoostRegressor
+import numpy as np
+
+# Time Series Models
+from statsmodels.tsa.holtwinters import ExponentialSmoothing, SimpleExpSmoothing
 import pmdarima as pm
 from pmdarima import auto_arima
 
@@ -228,7 +216,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         self.coef_ -= hessian_inv @ grad
 
 
-# Modified ARIMAXGBoost Class ##################################################
+# Modified ARIMAXGBoost Class
 class ARIMAXGBoost(BaseEstimator, RegressorMixin):
     """Hybrid SARIMAX + Boosting ensemble with custom GD/SGD
 
@@ -255,10 +243,17 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
             n_iter=2000, lr=0.1, alpha=0.01, l1_ratio=0.01, momentum=0.75
         )
         self.sgd_model = GradientDescentRegressor(n_iter=2000, lr=0.01, batch_size=32)
-        self.lgbm_model = LGBMRegressor(n_jobs=-1, verbosity=-1, scale_pos_weight= 2, loss_function="Logloss")
-        self.catboost_model = CatBoostRegressor(
-            iterations=500, learning_rate=0.1, depth=6, verbose=0, loss_function= 'Huber:delta=1.5'
+        self.lgbm_model = LGBMRegressor(
+            n_jobs=-1, verbosity=-1, scale_pos_weight=2, loss_function="Logloss"
         )
+        self.catboost_model = CatBoostRegressor(
+            iterations=500,
+            learning_rate=0.1,
+            depth=6,
+            verbose=0,
+            loss_function="Huber:delta=1.5",
+        )
+        self.autoarima = False
 
     # def fit(self, X, y):
     #     # ARIMA component
@@ -294,6 +289,7 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         Parameters:
         - X: Features (can include lagged values, external features, etc.).
         - y: Target variable (stock prices or price changes).
+        - autoarima: Whether use auto_arima
         """
         # Convert to numpy and clean data
         X = np.asarray(X, dtype=np.float64)
@@ -313,22 +309,26 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
 
         # Initialize and fit ARIMA
         try:
-            # self.arima_model =  pm.auto_arima(
-            # y,
-            # seasonal=True,
-            # stepwise=True, trace=True,
-            # start_p=1,
-            # d=1,
-            # error_action='ignore',
-            # suppress_warnings=True,
-            # information_criterion='bic',
-            # max_order=8  # Limit parameter search space
-            # )
-            # self.arima_model_fit = self.arima_model
-            self.arima_model = SARIMAX(y, order=(0, 1, 4), seasonal_order=(2, 1, 2, 6))
-            self.arima_model.initialize_approximate_diffuse() # this line
-
-            self.arima_model_fit = self.arima_model.fit(disp=False, maxiter=200)
+            if self.autoarima:
+                self.arima_model = pm.auto_arima(
+                    y,
+                    seasonal=True,
+                    stepwise=True,
+                    trace=True,
+                    start_p=1,
+                    d=1,
+                    error_action="ignore",
+                    suppress_warnings=True,
+                    information_criterion="bic",
+                    max_order=8,  # Limit parameter search space
+                )
+                self.arima_model_fit = self.arima_model
+            else:
+                self.arima_model = SARIMAX(
+                    y, order=(0, 1, 4), seasonal_order=(2, 1, 2, 6)
+                )
+                self.arima_model.initialize_approximate_diffuse()  # this line
+                self.arima_model_fit = self.arima_model.fit(disp=False, maxiter=200)
         except Exception as e:
             print(f"ARIMA failed: {str(e)}")
             self.arima_model_fit = None
@@ -357,16 +357,18 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
 
         Returns:
         - Final predictions combining ARIMA and XGBoost.
-        """ 
+        """
         # Validate and clean input
         X = np.asarray(X, dtype=np.float64)
         X = np.nan_to_num(X, nan=0.0, posinf=1e5, neginf=-1e5)
 
         # Add momentum regime detection
         momentum_threshold = 65  # RSI-based threshold
-        momentum_regime = np.where(X[:,-10] > momentum_threshold,  # 'RSI' index
-                                0.1,  # Strong upward momentum
-                                -0.1) # Weak/downward momentum
+        momentum_regime = np.where(
+            X[:, -10] > momentum_threshold,  # 'RSI' index
+            0.1,  # Strong upward momentum
+            -0.1,
+        )  # Weak/downward momentum
 
         if self.scaler is None:
             raise RuntimeError("Model not fitted yet")
@@ -380,8 +382,12 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         # ARIMA forecast
         if self.arima_model_fit:
             try:
-                arima_pred = self.arima_model_fit.forecast(steps=X.shape[0])
-                # arima_pred = self.arima_model_fit.predict(n_periods=X.shape[0],return_conf_int=False)
+                if self.autoarima:
+                    arima_pred = self.arima_model_fit.predict(
+                        n_periods=X.shape[0], return_conf_int=False
+                    )
+                else:
+                    arima_pred = self.arima_model_fit.forecast(steps=X.shape[0])
             except:
                 arima_pred = np.zeros(X.shape[0])
         else:
@@ -418,13 +424,12 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
 
         # Modify predictions based on momentum regime
         predictions = (
-            0.20 * arima_pred * (1 + 0.01 * momentum_regime) +
-            0.10 * (hwes_forecast * 0.6 + ses2_forecast * 0.4) +
-            0.70 * (gd_pred * 0.8 + sgd_pred * 0.2) * (1 + 0.01 * momentum_regime) +
-            0.05 * lgbm_pred +
-            0.05 * catboost_pred
+            0.20 * arima_pred * (1 + 0.02 * momentum_regime)
+            + 0.10 * (hwes_forecast * 0.6 + ses2_forecast * 0.4)
+            + 0.70 * (gd_pred * 0.8 + sgd_pred * 0.2) * (1 + 0.02 * momentum_regime)
+            + 0.05 * lgbm_pred
+            + 0.05 * catboost_pred
         )
-
 
         # Final sanitization
         return np.nan_to_num(predictions, nan=np.nanmean(predictions))

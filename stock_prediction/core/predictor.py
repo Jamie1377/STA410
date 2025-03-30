@@ -1,6 +1,7 @@
 import yfinance as yf
 import pandas as pd
 import numpy as np
+from numpy.polynomial import polynomial 
 from datetime import date, timedelta
 from sklearn.metrics import root_mean_squared_error, mean_absolute_percentage_error, r2_score
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
@@ -11,7 +12,7 @@ import pandas_market_calendars as mcal
 from sklearn.model_selection import train_test_split
 from stock_prediction.core import ARIMAXGBoost
 from stock_prediction.utils import get_next_valid_date
-
+from hmmlearn.hmm import GaussianHMM
 
 # Sample Dataset
 stock_data = yf.download("AAPL", start="2024-02-20", end=date.today())
@@ -94,6 +95,9 @@ class StockPredictor:
         # Fourier transform
         data_FT = self.data.copy().reset_index()[["Date",'Close']]
         close_fft = np.fft.fft(np.asarray(data_FT['Close'].tolist()))
+
+        self.data["FT_real"] = np.real(close_fft)
+        self.data["FT_img"] = np.imag(close_fft)
         # fft_df = pd.DataFrame({'fft': close_fft})
         # fft_df['absolute'] = fft_df['fft'].apply(lambda x: np.abs(x))
         # fft_df['angle'] = fft_df['fft'].apply(lambda x: np.angle(x))
@@ -241,6 +245,9 @@ class StockPredictor:
         ).astype(
             int
         )
+        
+
+
 
         self.data = pd.merge(self.data, economic_data, on="Date", how="left")
         # self.data["Daily Returns"] = self.data["Close"].pct_change()
@@ -257,6 +264,24 @@ class StockPredictor:
         self.data['Volatility_Adj_Momentum'] = self.data['Volatility_Adj_Momentum'].clip(lower=0.1)
         self.data['Volatility_Adj_Momentum'] = self.data['Volatility_Adj_Momentum'].clip(upper=10.0)
         self.data['Volatility_Adj_Momentum'] = self.data['Volatility_Adj_Momentum'].fillna(0.0)
+
+       
+
+        # Prepare features for HMM
+        
+        hmm = GaussianHMM(n_components=5, covariance_type="diag", n_iter=1000)
+        hmm.fit(self.data["Close"].pct_change().dropna().values.reshape(-1,1))
+        print(self.data["Close"].pct_change().dropna().values.reshape(-1,1))
+
+        # Predict hidden states
+        self.data['Market_State'] = 1
+        self.data['Market_State'].iloc[1:] = hmm.predict(self.data["Close"].pct_change().dropna().values.reshape(-1,1))
+
+        
+
+
+
+
         self.data = self.data.dropna()
 
         # Process each feature set
@@ -353,8 +378,29 @@ class StockPredictor:
 
             # Polynomial features
             poly = PolynomialFeatures(degree=2)
-            X_train_poly = poly.fit_transform(X_train_scaled)
-            X_test_poly = poly.transform(X_test_scaled)
+            # X_train_poly = poly.fit_transform(X_train_scaled)
+            # degree = 2
+            # coefs = polynomial.polyfit(X_train, y_train, deg=degree)
+            # X_train_poly = np.column_stack([X_train**i for i in range(degree + 1)])
+
+
+            degree = 2
+            X_train_poly = np.zeros_like(X_train)  # Preserve the shape
+            X_test_poly = np.zeros_like(X_test)
+            for i in range(X_train.shape[1]):  # Loop over each feature
+                coef = np.polynomial.polynomial.polyfit(X_train.iloc[:, i], y_train, degree)  # Fit polynomial
+                X_train_poly[:, i] = np.polynomial.polynomial.polyval(X_train.iloc[:, i], coef)  # Transform X
+                X_test_poly[:, i] = np.polynomial.polynomial.polyval(X_test.iloc[:, i], coef)    # Transform X_test
+
+
+
+           
+
+
+
+
+            # X_test_poly = poly.transform(X_test_scaled)
+
 
             # Train models
             models = {
@@ -390,46 +436,92 @@ class StockPredictor:
             #     )
             # X_train[filtered_columns] *= importances
 
+            
+
+
+            
+
+
+
+
+
             from sklearn.ensemble import (
                 RandomForestRegressor,
                 GradientBoostingRegressor,
             )
             from sklearn.model_selection import cross_val_score
 
+            # def advanced_feature_weighting(X, y):
+            #     # Multiple models for feature importance
+            #     models = [
+            #         RandomForestRegressor(n_estimators=100),
+            #         GradientBoostingRegressor(n_estimators=100),
+            #         ExtraTreesRegressor(n_estimators=100),
+            #     ]
+
+            #     # Collect feature importances from multiple models
+            #     all_importances = []
+            #     for model in models:
+            #         model.fit(X, y)
+            #         all_importances.append(model.feature_importances_)
+
+            #     # Aggregate importances
+            #     avg_importances = np.mean(all_importances, axis=0)
+
+            #     # Normalize and apply cross-validation performance weighting
+            #     cv_scores = []
+            #     for model in models:
+            #         scores = cross_val_score(
+            #             model, X, y, cv=5, scoring="neg_mean_squared_error"
+            #         )
+            #         cv_scores.append(-np.mean(scores))
+
+            #     # Weight importances by model performance
+            #     model_weights = 1 / np.array(cv_scores)
+            #     model_weights /= np.sum(model_weights)
+
+            #     # Final feature weights
+            #     weighted_importances = np.zeros_like(avg_importances)
+            #     for i, (imp, mw) in enumerate(zip(all_importances, model_weights)):
+            #         weighted_importances += imp * mw
+
+            #     return weighted_importances / np.sum(weighted_importances)
             def advanced_feature_weighting(X, y):
-                # Multiple models for feature importance
+                """Modified to ensure stable weights"""
                 models = [
                     RandomForestRegressor(n_estimators=100),
                     GradientBoostingRegressor(n_estimators=100),
-                    ExtraTreesRegressor(n_estimators=100),
+                    ExtraTreesRegressor(n_estimators=100)
                 ]
-
-                # Collect feature importances from multiple models
+                
+                # Calculate normalized importances
                 all_importances = []
                 for model in models:
                     model.fit(X, y)
-                    all_importances.append(model.feature_importances_)
-
-                # Aggregate importances
-                avg_importances = np.mean(all_importances, axis=0)
-
-                # Normalize and apply cross-validation performance weighting
+                    if hasattr(model, "feature_importances_"):
+                        imp = model.feature_importances_
+                    else:
+                        imp = np.abs(model.coef_)  # For linear models
+                    all_importances.append(imp / np.sum(imp))  # Normalized
+                
+                # Geometric mean instead of average
+                avg_importances = np.exp(np.mean(np.log(all_importances + 1e-8), axis=0))
+                
+                # Cross-validation weighting
                 cv_scores = []
                 for model in models:
-                    scores = cross_val_score(
-                        model, X, y, cv=5, scoring="neg_mean_squared_error"
-                    )
+                    scores = cross_val_score(model, X, y, cv=5, 
+                                        scoring='neg_mean_squared_error')
                     cv_scores.append(-np.mean(scores))
-
-                # Weight importances by model performance
-                model_weights = 1 / np.array(cv_scores)
-                model_weights /= np.sum(model_weights)
-
-                # Final feature weights
+                
+                # Softmax weighting
+                model_weights = np.exp(cv_scores) / np.sum(np.exp(cv_scores))
+                
+                # Final weights
                 weighted_importances = np.zeros_like(avg_importances)
                 for i, (imp, mw) in enumerate(zip(all_importances, model_weights)):
                     weighted_importances += imp * mw
-
+                
                 return weighted_importances / np.sum(weighted_importances)
 
             if weight is True:
@@ -445,17 +537,41 @@ class StockPredictor:
                 # feature_weights = importances / np.sum(importances)
                 feature_weights = advanced_feature_weighting(X_train, y_train)
 
-                # Store feature importances for reference
-                self.feature_importances[predictor] = dict(
-                    zip(features, feature_weights)
-                )
+                # 1. Ensure positive normalized weights
+                feature_weights = np.abs(feature_weights)  # Force non-negative
+                feature_weights += 1e-8  # Prevent zero division
+                feature_weights /= np.sum(feature_weights)  # Normalize to sum=1
 
-                # Apply weights to training data
+                # Debug: Print feature weights
+                print(f"\nFeature weights for {predictor}:")
+                for feat, w in zip(features, feature_weights):
+                    print(f"{feat}: {w:.4f}")
+
+                # 2. Apply weights BEFORE scaling
                 X_train_weighted = X_train.copy()
                 for i, feat in enumerate(features):
-                    X_train_weighted[feat] *= feature_weights[i]
+                    X_train_weighted[feat] *= feature_weights[i] * 100  # Scale to preserve magnitude
 
-                X_train_scaled_weighted = scaler.transform(X_train_weighted)
+
+
+
+                 # 3. Use same scaler for train/test
+                scaler_1 = StandardScaler()
+                X_train_scaled_weighted = scaler_1.fit_transform(X_train_weighted)
+                # X_test_scaled = scaler_1.transform(X_test[features])  # Use original test features
+                
+        
+                # # Store feature importances for reference
+                # self.feature_importances[predictor] = dict(
+                #     zip(features, feature_weights)
+                # )
+
+                # # Apply weights to training data
+                # X_train_weighted = X_train.copy()
+                # for i, feat in enumerate(features):
+                #     X_train_weighted[feat] *= feature_weights[i]
+
+                # X_train_scaled_weighted = scaler.transform(X_train_weighted)
                 X_train_poly_weighted = poly.transform(X_train_scaled_weighted)
 
                 # Weighted fitting for applicable models
@@ -481,12 +597,19 @@ class StockPredictor:
                     y_pred = model.predict(scaler.transform(X_test))
                        # 1 - (1 - model.score(X_test_scaled, y_test))
                 elif name == "polynomial":
-                    y_pred = model.predict(poly.transform(scaler.transform(X_test)))
+                    # y_pred = model.predict(poly.transform(scaler.transform(X_test)))
+
+                    
+                    degree = 2
+                    # X_test_poly = np.column_stack([X_test**i for i in range(degree + 1)])
+                    y_pred = model.predict(X_test_poly)
                        # 1 - (1 - model.score(X_test_poly, y_test))
                 elif name == "arimaxgb":
                     y_pred = model.predict(X_test)
                 
-                r2 = r2_score(y_test, y_pred)
+                # Compute adjusted R^2  # original one r2_score(y_test, y_pred)
+                r2 = r2_score(y_true=y_test, y_pred=y_pred) 
+                adj_r2 = 1 - ( 1 - r2_score(y_true=y_test, y_pred=y_pred) ) * ( X_test.shape[0] - 1 ) / (  X_test.shape[0] - X_test.shape[1] - 1 ) 
 
                 # Compute metrics
                 rmse = root_mean_squared_error(y_test, y_pred)
@@ -513,7 +636,13 @@ class StockPredictor:
                 }
                 refit_models["linear"].fit(X, y)
                 refit_models["ridge"].fit(scaler.transform(X), y)
-                refit_models["polynomial"].fit(poly.transform(scaler.transform(X)), y)
+                # refit_models["polynomial"].fit(poly.transform(scaler.transform(X)), y)
+                degree = 2
+                X_poly = np.zeros_like(X)  # Preserve the shape
+                for i in range(X.shape[1]):  # Loop over each feature
+                    coef = np.polynomial.polynomial.polyfit(X.iloc[:, i], y, degree)  # Fit polynomial
+                    X_poly[:, i] = np.polynomial.polynomial.polyval(X.iloc[:, i], coef)  # Transform X
+                refit_models["polynomial"].fit(X_poly,y)
                 refit_models["arimaxgb"].fit(X, y)
                 self.models[predictor] = refit_models
 
@@ -937,6 +1066,7 @@ class StockPredictor:
                 # Apply model for Close price
                 close_model = self.models["Close"][model_type]
 
+
                 # Vector prediction for both datasets
                 raw_pred_close = close_model.predict(pred_input.reshape(1, -1))[0]
                 raw_backtest_close = close_model.predict(backtest_input.reshape(1, -1))[
@@ -945,6 +1075,8 @@ class StockPredictor:
                 raw_backtest_raw_close = close_model.predict(
                     raw_backtest_input.reshape(1, -1)
                 )[0]
+
+
 
                 # Apply ensemble correction - weighted average of multiple correction factors
                 ensemble_pred = 0
@@ -1002,6 +1134,7 @@ class StockPredictor:
 
             # Step 3: Now handle other predictors
             for predictor in predictors:
+
                 if predictor == "Close":
                     continue  # Already handled
 
@@ -1158,63 +1291,63 @@ class StockPredictor:
                     backtest_array[step, pred_idx] = ma200_backtest
                     raw_backtest_array[step, pred_idx] = ma200_raw_backtest
 
-                elif predictor == "Daily Returns" and "Close" in predictors:
-                    close_idx = predictor_indices["Close"]
+                # elif predictor == "Daily Returns" and "Close" in predictors:
+                #     close_idx = predictor_indices["Close"]
 
-                    # Calculate daily returns from consecutive Close prices
-                    if step == 0:
-                        # Get last actual Close from data
-                        prev_close_pred = observation["Close"].values[-1]
-                        prev_close_raw_backtest = observation["Close"].values[-1]
-                        prev_close_backtest = backtest["Close"].values[-1]
-                        prev_close_raw_backtest = backtest["Close"].values[-1]
-                    else:
-                        # Use previous predicted Close
-                        prev_close_pred = pred_array[step - 1, close_idx]
-                        prev_close_raw_pred = raw_pred_array[step - 1, close_idx]
-                        prev_close_backtest = backtest_array[step - 1, close_idx]
-                        prev_close_raw_backtest = raw_backtest_array[
-                            step - 1, close_idx
-                        ]
+                #     # Calculate daily returns from consecutive Close prices
+                #     if step == 0:
+                #         # Get last actual Close from data
+                #         prev_close_pred = observation["Close"].values[-1]
+                #         prev_close_raw_backtest = observation["Close"].values[-1]
+                #         prev_close_backtest = backtest["Close"].values[-1]
+                #         prev_close_raw_backtest = backtest["Close"].values[-1]
+                #     else:
+                #         # Use previous predicted Close
+                #         prev_close_pred = pred_array[step - 1, close_idx]
+                #         prev_close_raw_pred = raw_pred_array[step - 1, close_idx]
+                #         prev_close_backtest = backtest_array[step - 1, close_idx]
+                #         prev_close_raw_backtest = raw_backtest_array[
+                #             step - 1, close_idx
+                #         ]
 
-                    # Get current predicted Close
-                    current_close_pred = pred_array[step, close_idx]
-                    current_close_raw_pred = raw_pred_array[step, close_idx]
-                    current_close_backtest = backtest_array[step, close_idx]
-                    current_close_raw_backtest = raw_backtest_array[step, close_idx]
+                #     # Get current predicted Close
+                #     current_close_pred = pred_array[step, close_idx]
+                #     current_close_raw_pred = raw_pred_array[step, close_idx]
+                #     current_close_backtest = backtest_array[step, close_idx]
+                #     current_close_raw_backtest = raw_backtest_array[step, close_idx]
 
-                    # Calculate returns (handle division by zero)
-                    if prev_close_pred != 0:
-                        daily_return_pred = (current_close_pred / prev_close_pred) - 1
-                    else:
-                        daily_return_pred = 0
+                #     # Calculate returns (handle division by zero)
+                #     if prev_close_pred != 0:
+                #         daily_return_pred = (current_close_pred / prev_close_pred) - 1
+                #     else:
+                #         daily_return_pred = 0
 
-                    if prev_close_backtest != 0:
-                        daily_return_backtest = (
-                            current_close_backtest / prev_close_backtest
-                        ) - 1
-                    else:
-                        daily_return_backtest = 0
+                #     if prev_close_backtest != 0:
+                #         daily_return_backtest = (
+                #             current_close_backtest / prev_close_backtest
+                #         ) - 1
+                #     else:
+                #         daily_return_backtest = 0
 
-                    if prev_close_raw_backtest != 0:
-                        daily_return_raw_backtest = (
-                            current_close_raw_backtest / prev_close_raw_backtest
-                        ) - 1
-                    else:
-                        daily_return_raw_backtest = 0
+                #     if prev_close_raw_backtest != 0:
+                #         daily_return_raw_backtest = (
+                #             current_close_raw_backtest / prev_close_raw_backtest
+                #         ) - 1
+                #     else:
+                #         daily_return_raw_backtest = 0
 
-                    if prev_close_raw_pred != 0:
-                        daily_return_raw_pred = (
-                            current_close_raw_pred / prev_close_raw_pred
-                        ) - 1
-                    else:
-                        daily_return_raw_pred = 0
+                #     if prev_close_raw_pred != 0:
+                #         daily_return_raw_pred = (
+                #             current_close_raw_pred / prev_close_raw_pred
+                #         ) - 1
+                #     else:
+                #         daily_return_raw_pred = 0
 
-                    # Store daily returns
-                    pred_array[step, pred_idx] = daily_return_pred
-                    raw_pred_array[step, pred_idx] = daily_return_raw_pred
-                    backtest_array[step, pred_idx] = daily_return_backtest
-                    raw_backtest_array[step, pred_idx] = daily_return_raw_backtest
+                #     # Store daily returns
+                #     pred_array[step, pred_idx] = daily_return_pred
+                #     raw_pred_array[step, pred_idx] = daily_return_raw_pred
+                #     backtest_array[step, pred_idx] = daily_return_backtest
+                #     raw_backtest_array[step, pred_idx] = daily_return_raw_backtest
 
                 elif predictor == "VIX" and "Close" in predictors:
                     # Use current volatility estimate directly
@@ -1329,6 +1462,9 @@ class StockPredictor:
 
                     # Get model predictions
                     model = self.models[predictor][model_type]
+
+
+                    
                     raw_pred = model.predict(pred_input.reshape(1, -1))[0]
                     raw_backtest = model.predict(backtest_input.reshape(1, -1))[0]
 
@@ -2052,7 +2188,7 @@ class StockPredictor:
 
             if predictors is None:
                 predictors = (
-                    [
+                    ["Market_State",
                         "Close",
                         # "MA_50",
                         # "MA_200",
@@ -2060,7 +2196,7 @@ class StockPredictor:
                         "MA_21",
                         "SP500",
                         "TNX",
-                        "USDCAD=X",
+                        # "USDCAD=X",
                         "Tech",
                         "Fin",
                         "VIX",
@@ -2073,8 +2209,11 @@ class StockPredictor:
                         # 'Fourier_trans_9_comp_img',
                         # 'Fourier_trans_100_comp_img',
 
-                        "Fourier_PCA_0",
-                        "Fourier_PCA_1"
+                        # "Fourier_PCA_0",
+                        # "Fourier_PCA_1"
+                        "FT_real",
+                        "FT_img",
+                        
 
 
                     ]

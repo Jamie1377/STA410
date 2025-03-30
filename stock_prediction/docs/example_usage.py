@@ -10,7 +10,7 @@ stock_settings = {
     "ANF": {"horizons": [7, 10], "weight": False},
     "AVGO": {"horizons": [7, 5, 10, 12], "weight": False},
     "AXP": {"horizons": [5, 10, 13], "weight": False},
-    "NVDA": {"horizons": [5, 10, 12, 15], "weight": False},
+    "NVDA": {"horizons": [5, 10, 15], "weight": False},
     "MCO": {"horizons": [3], "weight": False},
     "PYPL": {"horizons": [5], "weight": False},
     "SPGI": {"horizons": [12], "weight": False},
@@ -37,6 +37,7 @@ stock_settings = {
     "MTDR": {"horizons": [5, 10, 15], "weight": False},
     "CHRD": {"horizons": [5, 10, 15], "weight": False},
     "CHX": {"horizons": [15], "weight": False},
+    "DTM":  {"horizons": [10, 15], "weight": False},
 }
 
 print(list(yf.Sector("energy").top_companies.index))
@@ -95,9 +96,9 @@ toc = time.time()
 StockPredictor.full_workflow(
     "2024-01-01",
     date.today(),
-    companies=["DTM"],
+    companies=["NVDA"],
     stock_settings=stock_settings,
-    model="linear",
+    model="arimaxgb",
 )
 tic = time.time()
 tic - toc

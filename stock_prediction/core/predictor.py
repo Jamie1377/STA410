@@ -10,9 +10,10 @@ from sklearn.linear_model import LinearRegression, Ridge
 import matplotlib.pyplot as plt
 import pandas_market_calendars as mcal
 from sklearn.model_selection import train_test_split
-from stock_prediction.core import ARIMAXGBoost
-from stock_prediction.utils import get_next_valid_date
 from hmmlearn.hmm import GaussianHMM
+
+from stock_prediction.core import ARIMAXGBoost, TradingARIMAXGBoost
+from stock_prediction.utils import get_next_valid_date
 
 # Sample Dataset
 stock_data = yf.download("AAPL", start="2024-02-20", end=date.today())
@@ -407,7 +408,7 @@ class StockPredictor:
                 "linear": LinearRegression(),
                 "ridge": Ridge(alpha=1.0),
                 "polynomial": LinearRegression(),
-                "arimaxgb": ARIMAXGBoost(),
+                "arimaxgb": TradingARIMAXGBoost(), # ARIMAXGBoost(),
             }
 
             # Feature importance
@@ -632,7 +633,7 @@ class StockPredictor:
                     "linear": LinearRegression(),
                     "ridge": Ridge(alpha=1.0),
                     "polynomial": LinearRegression(), #Ridge(alpha=1.0),
-                    "arimaxgb": ARIMAXGBoost(),
+                    "arimaxgb": TradingARIMAXGBoost(),
                 }
                 refit_models["linear"].fit(X, y)
                 refit_models["ridge"].fit(scaler.transform(X), y)

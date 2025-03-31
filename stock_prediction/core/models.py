@@ -434,6 +434,10 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         # Final sanitization
         return np.nan_to_num(predictions, nan=np.nanmean(predictions))
 
+
+
+
+
     # def predict(self, X):
     #     # ARIMA forecasts
     #     arima_forecast = self.arima_model_fit.forecast(steps=len(X))
@@ -654,3 +658,106 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
 #         ) + (1 / 2) * (lgbm_predictions + catboost_predictions)
 
 #         return final_predictions
+
+
+class RiskAdjustedARIMAXGBoost(ARIMAXGBoost):
+    def __init__(self, risk_free_rate=0.0, max_drawdown_weight=0.3, **kwargs):
+        super().__init__(**kwargs)
+        self.risk_free_rate = risk_free_rate
+        self.max_drawdown_weight = max_drawdown_weight
+        
+    def _calculate_sharpe(self, returns):
+        excess_returns = returns - self.risk_free_rate
+        return np.mean(excess_returns) / np.std(excess_returns)
+    
+    def predict(self, X):
+        raw_pred = super().predict(X)
+        
+        # Calculate risk metrics
+        returns = raw_pred.pct_change().dropna()
+        sharpe = self._calculate_sharpe(returns)
+        cumulative = (1 + returns).cumprod()
+        max_drawdown = 1 - cumulative.div(cumulative.cummax()).min()
+        
+        # Adjust predictions based on risk
+        risk_penalty = sharpe * (1 + self.max_drawdown_weight * max_drawdown)
+        return raw_pred * risk_penalty
+    
+class WalkForwardValidator:
+    def __init__(self, model, train_size=0.7, window_type='expanding'):
+        self.model = model
+        self.train_size = train_size
+        self.window_type = window_type
+        
+    def validate(self, X, y):
+        n_samples = len(X)
+        split_idx = int(n_samples * self.train_size)
+        
+        metrics = []
+        while split_idx < n_samples:
+            X_train, X_test = X[:split_idx], X[split_idx:]
+            y_train, y_test = y[:split_idx], y[split_idx:]
+            
+            self.model.fit(X_train, y_train)
+            preds = self.model.predict(X_test)
+            
+            # Calculate financial metrics
+            returns = preds.pct_change().dropna()
+            sharpe = self._calculate_sharpe(returns)
+            metrics.append(sharpe)
+            
+            # Update split index
+            split_idx += 1 if self.window_type == 'rolling' else 0
+        
+        return np.mean(metrics)
+    
+
+
+
+
+# Add to models.py after ARIMAXGBoost class
+class TradingLossMixin:
+    """Mixin class for trading-specific loss metrics"""
+    def _trading_loss(self, y_true, y_pred):
+        """
+        Custom loss combining MSE with downside risk penalty
+        
+        Parameters:
+            y_true (array): True values
+            y_pred (array): Predicted values
+            
+        Returns:
+            float: Combined loss value
+        """
+        returns = np.diff(y_pred) / y_pred[:-1]  # Calculate returns
+        downside_returns = returns[returns < 0]  
+        
+        # Calculate components
+        mse = root_mean_squared_error(y_true[1:], y_pred[1:])  # Skip first NaN
+        sortino = np.mean(downside_returns) / (np.std(downside_returns) if len(downside_returns) > 0 else 0)
+        
+        return mse * (1 - sortino)
+
+
+class TradingARIMAXGBoost(ARIMAXGBoost, TradingLossMixin):
+    """ARIMAXGBoost with trading-optimized loss function"""
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        
+    def fit(self, X, y):
+        """Fit model using custom loss"""
+        # Standard fitting
+        super().fit(X, y)
+        
+        # Additional optimization using custom loss
+        initial_pred = super().predict(X)
+        initial_loss = self._trading_loss(y, initial_pred)
+        
+        # Fine-tune model weights based on custom loss
+        # (Example: Adjust GD/SGD weights)
+        self.gd_model.lr *= 0.9 if initial_loss > 1.0 else 1.1
+        
+    def score(self, X, y):
+        """Sklearn-compatible scoring method"""
+        preds = self.predict(X)
+        return -self._trading_loss(y, preds)  # Negative for sklearn convention

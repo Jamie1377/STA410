@@ -1440,8 +1440,8 @@ class StockPredictor:
                         "Tech",
                         "Fin",
                         "VIX",
-                        "FT_real",
-                        "FT_img",
+                        # "FT_real",
+                        # "FT_img",
                     ]
                     + [
                         "rolling_min",

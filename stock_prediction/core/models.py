@@ -324,8 +324,8 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
 
         # Fit residual models
         residuals = y - self.gd_model.predict(X_scaled)
-        self.lgbm_model.fit(X, residuals)
-        self.catboost_model.fit(X, residuals)
+        self.lgbm_model.fit(X_scaled, residuals)
+        self.catboost_model.fit(X_scaled, residuals)
 
     def predict(self, X):
         """
@@ -342,7 +342,7 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         X = np.nan_to_num(X, nan=0.0, posinf=1e5, neginf=-1e5)
 
         # Add momentum regime detection
-        momentum_threshold = 70  # RSI-based threshold
+        momentum_threshold = 65  # RSI-based threshold
         momentum_regime = np.where(
             X[:, -10] > momentum_threshold,  # 'RSI' index
             0.1,  # Strong upward momentum
@@ -381,8 +381,8 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         sgd_pred = np.clip(self.sgd_model.predict(X_scaled), -1e4, 1e4)
 
         # Boosting residuals
-        lgbm_pred = self.lgbm_model.predict(X)
-        catboost_pred = self.catboost_model.predict(X)
+        lgbm_pred = self.lgbm_model.predict(X_scaled)
+        catboost_pred = self.catboost_model.predict(X_scaled)
 
         
         # Modify predictions based on momentum regime

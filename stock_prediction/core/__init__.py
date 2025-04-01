@@ -1,4 +1,4 @@
-from .models import ARIMAXGBoost, TradingARIMAXGBoost
-from .predictor import StockPredictor
+from stock_prediction.core.models import ARIMAXGBoost
+from stock_prediction.core.predictor import StockPredictor
 
-__all__ = ["ARIMAXGBoost", "StockPredictor", "TradingARIMAXGBoost"]
+__all__ = ["ARIMAXGBoost", "StockPredictor"]

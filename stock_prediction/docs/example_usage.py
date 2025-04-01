@@ -3,7 +3,7 @@ from stock_prediction.utils.analysis import vizualize_correlation
 from datetime import date
 import time
 import yfinance as yf
-
+import numpy as np
 stock_settings = {
     "V": {"horizons": [10], "weight": False},
     "GE": {"horizons": [5], "weight": False},
@@ -28,16 +28,16 @@ stock_settings = {
     "MTCH": {"horizons": [10], "weight": False},
     "DINO": {"horizons": [10, 15], "weight": False},
     "XOM": {"horizons": [10], "weight": False},
-    "CVX": {"horizons": [15], "weight": False},
+    "CVX": {"horizons": [10], "weight": False},
     "COP": {"horizons": [15], "weight": False},
     "WMB": {"horizons": [15], "weight": False},
     "EPD": {"horizons": [10, 15], "weight": False},
     "EOG": {"horizons": [10, 15], "weight": False},
     "CVX": {"horizons": [10], "weight": False},
-    "MTDR": {"horizons": [5, 10, 15], "weight": False},
+    "MTDR": {"horizons": [10, 15], "weight": False},
     "CHRD": {"horizons": [5, 10, 15], "weight": False},
     "CHX": {"horizons": [15], "weight": False},
-    "DTM":  {"horizons": [10, 15], "weight": False},
+    "DTM": {"horizons": [10, 15], "weight": False},
 }
 
 print(list(yf.Sector("energy").top_companies.index))
@@ -92,14 +92,14 @@ lis = [
     "CHX",
     "PAGP",
 ]
+random_num = np.random.randint(0, len(lis))
 toc = time.time()
 StockPredictor.full_workflow(
     "2024-01-01",
     date.today(),
-    companies=["EOG", "EPD"],
+    companies=lis[random_num:random_num+1],
     stock_settings=stock_settings,
     model="arimaxgb",
-
 )
 tic = time.time()
 tic - toc

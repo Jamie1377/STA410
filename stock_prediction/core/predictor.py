@@ -12,11 +12,11 @@ import pandas_market_calendars as mcal
 from sklearn.model_selection import train_test_split
 from hmmlearn.hmm import GaussianHMM
 
-from stock_prediction.core import ARIMAXGBoost, TradingARIMAXGBoost
+from stock_prediction.core import ARIMAXGBoost
 from stock_prediction.utils import get_next_valid_date
 
 # Sample Dataset
-stock_data = yf.download("AAPL", start="2024-02-20", end=date.today())
+stock_data = yf.download("AAPL", start="2024-01-01", end=date.today())
 stock_data.columns = stock_data.columns.droplevel(1)
 stock_data
 
@@ -270,18 +270,16 @@ class StockPredictor:
 
         # Prepare features for HMM
         
-        hmm = GaussianHMM(n_components=5, covariance_type="diag", n_iter=1000)
-        hmm.fit(self.data["Close"].pct_change().dropna().values.reshape(-1,1))
-        print(self.data["Close"].pct_change().dropna().values.reshape(-1,1))
+        # hmm = GaussianHMM(n_components=4, covariance_type="diag", n_iter=1000)
+        # hmm.fit(self.data["Close"].pct_change().dropna().values.reshape(-1,1))
+        # # print(self.data["Close"].pct_change().dropna().values.reshape(-1,1))
 
-        # Predict hidden states
-        self.data['Market_State'] = 1
-        self.data['Market_State'].iloc[1:] = hmm.predict(self.data["Close"].pct_change().dropna().values.reshape(-1,1))
-
-        
-
-
-
+        # # Predict hidden states
+        # market_state = hmm.predict(self.data["Close"].pct_change().dropna().values.reshape(-1,1))
+        # self.data['Market_State'] = 0
+        # if len(set(list(market_state))) != 1:
+        #     self.data['Market_State'][0] = 0
+        #     self.data['Market_State'].iloc[1:] = market_state
 
         self.data = self.data.dropna()
 
@@ -385,14 +383,14 @@ class StockPredictor:
             # X_train_poly = np.column_stack([X_train**i for i in range(degree + 1)])
 
 
+            # INCORRECT CODE (remove this)
             degree = 2
-            X_train_poly = np.zeros_like(X_train)  # Preserve the shape
+            X_train_poly = np.zeros_like(X_train)
             X_test_poly = np.zeros_like(X_test)
-            for i in range(X_train.shape[1]):  # Loop over each feature
-                coef = np.polynomial.polynomial.polyfit(X_train.iloc[:, i], y_train, degree)  # Fit polynomial
-                X_train_poly[:, i] = np.polynomial.polynomial.polyval(X_train.iloc[:, i], coef)  # Transform X
-                X_test_poly[:, i] = np.polynomial.polynomial.polyval(X_test.iloc[:, i], coef)    # Transform X_test
-
+            for i in range(X_train.shape[1]):
+                coef = np.polynomial.polynomial.polyfit(X_train.iloc[:, i], y_train, degree)
+                X_train_poly[:, i] = np.polynomial.polynomial.polyval(X_train.iloc[:, i], coef)
+                X_test_poly[:, i] = np.polynomial.polynomial.polyval(X_test.iloc[:, i], coef)
 
 
            
@@ -408,7 +406,7 @@ class StockPredictor:
                 "linear": LinearRegression(),
                 "ridge": Ridge(alpha=1.0),
                 "polynomial": LinearRegression(),
-                "arimaxgb": TradingARIMAXGBoost(), # ARIMAXGBoost(),
+                "arimaxgb":  ARIMAXGBoost(),
             }
 
             # Feature importance
@@ -633,7 +631,7 @@ class StockPredictor:
                     "linear": LinearRegression(),
                     "ridge": Ridge(alpha=1.0),
                     "polynomial": LinearRegression(), #Ridge(alpha=1.0),
-                    "arimaxgb": TradingARIMAXGBoost(),
+                    "arimaxgb": ARIMAXGBoost(),
                 }
                 refit_models["linear"].fit(X, y)
                 refit_models["ridge"].fit(scaler.transform(X), y)
@@ -2189,7 +2187,8 @@ class StockPredictor:
 
             if predictors is None:
                 predictors = (
-                    ["Market_State",
+                    [
+                        # "Market_State",
                         "Close",
                         # "MA_50",
                         # "MA_200",

@@ -26,7 +26,7 @@ stock_settings = {
     "TMUS": {"horizons": [10], "weight": False},
     "ASML": {"horizons": [10], "weight": False},
     "MTCH": {"horizons": [10], "weight": False},
-    "DINO": {"horizons": [10], "weight": False},
+    "DINO": {"horizons": [10, 15], "weight": False},
     "XOM": {"horizons": [10], "weight": False},
     "CVX": {"horizons": [15], "weight": False},
     "COP": {"horizons": [15], "weight": False},
@@ -96,7 +96,7 @@ toc = time.time()
 StockPredictor.full_workflow(
     "2024-01-01",
     date.today(),
-    companies=["DTM"],
+    companies=["EOG", "EPD"],
     stock_settings=stock_settings,
     model="arimaxgb",
 

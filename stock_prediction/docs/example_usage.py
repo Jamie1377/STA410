@@ -105,7 +105,7 @@ tic = time.time()
 tic - toc
 print("Time taken", tic - toc)
 
-# AAPL 10
+# Step by Step
 
 # prediction_dataset = StockPredictor(
 #                 "CHRD",

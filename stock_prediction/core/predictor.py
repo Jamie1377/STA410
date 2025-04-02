@@ -1,6 +1,7 @@
+import numpy as np
 import yfinance as yf
 import pandas as pd
-import numpy as np
+
 from numpy.polynomial import polynomial
 from datetime import date, timedelta
 from sklearn.metrics import (
@@ -78,7 +79,7 @@ class StockPredictor:
 
     def load_data(self):
         """Load and prepare stock data with features"""
-
+        # np.random.seed(42)
         # Add momentum-specific features
         window = 15  # Standard momentum window
         self.data = yf.download(
@@ -309,6 +310,7 @@ class StockPredictor:
         refit : bool
             Whether to refit models on full data
         """
+        # np.random.seed(42)
         self.models = {}
         self.scalers = {}
         self.transformers = {}
@@ -537,6 +539,7 @@ class StockPredictor:
         Tuple[pd.DataFrame, pd.DataFrame]
             Forecasted data and backtest data
         """
+        # np.random.seed(42)
         # Ensure models are prepared
         if not self.models:
             raise ValueError("Please run prepare_models() first")
@@ -1410,7 +1413,8 @@ class StockPredictor:
         companies (list): The list of company names of the stocks
         stock_settings (dict): The dictionary of the stock settings
         """
-        default_horizons = [5, 10, 15]
+        # np.random.seed(42)
+        default_horizons = [10, 12, 15]
         default_weight = False
         default_refit = True
         default_model = "arimaxgb"

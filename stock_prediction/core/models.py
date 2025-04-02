@@ -1,3 +1,7 @@
+import numpy as np
+np.random.seed(42)
+import random
+random.seed(42)
 from sklearn.base import BaseEstimator, RegressorMixin
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from sklearn.linear_model import LinearRegression
@@ -8,13 +12,13 @@ from sklearn.preprocessing import StandardScaler
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
-import numpy as np
+
 
 # Time Series Models
 from statsmodels.tsa.holtwinters import ExponentialSmoothing, SimpleExpSmoothing
 import pmdarima as pm
 from pmdarima import auto_arima
-
+np.random.seed(42) 
 
 # Custom Gradient Descent Implementations
 class GradientDescentRegressor(BaseEstimator, RegressorMixin):
@@ -48,6 +52,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         momentum=0.9,
         batch_size=None,
         rmsprop=False,
+        random_state=None,  # Add random_state parameter
     ):
         self.n_iter = n_iter
         self.lr = lr
@@ -58,6 +63,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         self.coef_ = None
         self.intercept_ = 0.0
         self.rmsprop = rmsprop
+        self.random_state = random_state
         self.loss_history = []
         self.velocity = None
         self.sq_grad_avg = None
@@ -76,10 +82,13 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
             y (ndarray): Target
         """
         # Initialize velocity and sq_grad_avg properly
-        if self.velocity is None:
-            self.velocity = 0.0
-        if self.sq_grad_avg is None:
-            self.sq_grad_avg = 0.0
+        # if self.velocity is None:
+        #     self.velocity = 0.0
+        # if self.sq_grad_avg is None:
+        #     self.sq_grad_avg = 0.0
+        # Reset velocity and sq_grad_avg to None to force reinitialization
+        self.velocity = None
+        self.sq_grad_avg = None
 
         if self.batch_size and self.batch_size < X.shape[0]:
             self._fit_sgd(X, y)
@@ -94,9 +103,17 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
             X (ndarray): Features
             y (ndarray): Target
         """
+        if self.random_state is not None:
+            np.random.seed(self.random_state)
+            random.seed(self.random_state)
         X_b = self._add_bias(X)
         n_samples, n_features = X_b.shape
         self.coef_ = np.zeros(n_features)
+
+        # Initialize velocity and sq_grad_avg as zero vectors
+        self.velocity = np.zeros(n_features)
+        self.sq_grad_avg = np.zeros(n_features)
+
 
         for _ in range(self.n_iter):
             self.gradients_gd = 2 / n_samples * X_b.T @ (X_b @ self.coef_ - y)
@@ -138,20 +155,28 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
 
     def _fit_sgd(self, X, y):
         """Fit the model using SGD"""
+        if self.random_state is not None:
+            np.random.seed(self.random_state)
+            random.seed(self.random_state)
         X_b = self._add_bias(X)
         n_samples, n_features = X_b.shape
         self.coef_ = np.zeros(n_features)
         # self.velocity = np.zeros_like(self.coef_)
         # self.sq_grad_avg = np.zeros_like(self.coef_)
 
-        # Initialize velocity and sq_grad_avg if not done
-        if self.velocity is None:
-            self.velocity = np.zeros_like(self.coef_)
-        if self.sq_grad_avg is None:
-            self.sq_grad_avg = np.zeros_like(self.coef_)
+        # # Initialize velocity and sq_grad_avg if not done
+        # if self.velocity is None:
+        #     self.velocity = np.zeros_like(self.coef_)
+        # if self.sq_grad_avg is None:
+        #     self.sq_grad_avg = np.zeros_like(self.coef_)
+
+         # Initialize velocity and sq_grad_avg as zero vectors
+        self.velocity = np.zeros(n_features)
+        self.sq_grad_avg = np.zeros(n_features)
+
 
         for _ in range(self.n_iter):
-            indices = np.random.choice(n_samples, self.batch_size, replace=False)
+            indices = np.random.choice(n_samples, self.batch_size, replace=False) # Random Choice of indices
             X_batch = X_b[indices]
             y_batch = y[indices]
 
@@ -206,6 +231,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         return X_b @ np.r_[self.intercept_, self.coef_]
 
     def newton_step(self, X_b, y):
+        # np.random.seed(42)
         """Perform a Newton step
 
         Parameters:
@@ -241,16 +267,18 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
     """
 
     def __init__(self, xgb_params=None):
+        # np.random.seed(42)
+        # random.seed(42)
         """Initialize the ARIMA + XGBoost model"""
         self.arima_model = None
         self.linear_model = LinearRegression()
-        self.xgb_model = XGBRegressor()
+        self.xgb_model = XGBRegressor(random_state =42)
         self.gd_model = GradientDescentRegressor(
-            n_iter=2000, lr=0.1, alpha=0.01, l1_ratio=0.01, momentum=0.75
+            n_iter=2000, lr=0.1, alpha=0.01, l1_ratio=0.01, momentum=0.9, rmsprop=True,random_state=42
         )
-        self.sgd_model = GradientDescentRegressor(n_iter=2000, lr=0.01, batch_size=32)
+        self.sgd_model = GradientDescentRegressor(n_iter=2000, lr=0.01, batch_size=32, rmsprop=False, random_state=42)
         self.lgbm_model = LGBMRegressor(
-            n_jobs=-1, verbosity=-1, scale_pos_weight=2, loss_function="Logloss"
+            n_jobs=-1, verbosity=-1, scale_pos_weight=2, loss_function="Logloss",random_state=42
         )
         self.catboost_model = CatBoostRegressor(
             iterations=500,
@@ -258,6 +286,7 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
             depth=6,
             verbose=0,
             loss_function="Huber:delta=1.5",
+            random_seed=42
         )
         self.autoarima = False
 

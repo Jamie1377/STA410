@@ -1,9 +1,12 @@
+import numpy as np
+np.random.seed(42) 
+import random
+random.seed(42)
 from stock_prediction.core import StockPredictor
 from stock_prediction.utils.analysis import vizualize_correlation
 from datetime import date
 import time
 import yfinance as yf
-import numpy as np
 stock_settings = {
     "V": {"horizons": [10], "weight": False},
     "GE": {"horizons": [5], "weight": False},
@@ -38,6 +41,7 @@ stock_settings = {
     "CHRD": {"horizons": [5, 10, 15], "weight": False},
     "CHX": {"horizons": [15], "weight": False},
     "DTM": {"horizons": [10, 15], "weight": False},
+    "SUN":  {"horizons": [10, 12, 15], "weight": False},
 }
 
 print(list(yf.Sector("energy").top_companies.index))
@@ -93,11 +97,12 @@ lis = [
     "PAGP",
 ]
 random_num = np.random.randint(0, len(lis))
+random_lis = lis[random_num:random_num+1]
 toc = time.time()
 StockPredictor.full_workflow(
     "2024-01-01",
     date.today(),
-    companies=lis[random_num:random_num+1],
+    companies=["COP"],
     stock_settings=stock_settings,
     model="arimaxgb",
 )

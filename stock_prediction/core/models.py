@@ -7,7 +7,7 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import root_mean_squared_error
 from sklearn.preprocessing import StandardScaler
-
+from scipy.optimize import minimize
 # Boosting Models
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
@@ -65,7 +65,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         self.rmsprop = rmsprop
         self.random_state = random_state
         self.loss_history = []
-        self.velocity = None
+        self.velocity = None  # Velocity is also called decay factor
         self.sq_grad_avg = None
         self.gradients_gd = None
         self.gradients_sgd = None
@@ -247,6 +247,110 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         grad = self._compute_gradients(X_b, y)
         self.coef_ -= hessian_inv @ grad
 
+    def optimize_hyperparameters(self, X, y, param_bounds=None, n_iter=50):
+        """Optimize GD/SGD hyperparameters using directional accuracy objective.
+        
+        Parameters:
+            X (ndarray): Features
+            y (ndarray): Target
+            param_bounds (dict): Bounds for parameters to optimize
+            n_iter (int): Number of optimization iterations
+            
+        Returns:
+            dict: Optimized parameters
+        """
+        # Default parameter bounds (These paramters appear both with or without rmsprop)
+        if param_bounds is None:
+            param_bounds = {
+                'lr': (0.001, 0.5),
+                'momentum': (0.7, 0.99),
+                'alpha': (0.0001, 0.1), # L2 regularization
+                'l1_ratio': (0.0001, 0.1)
+            }
+
+        # Store original parameters
+        original_params = {
+            'lr': self.lr,
+            'momentum': self.momentum,
+            'alpha': self.alpha,
+            'l1_ratio': self.l1_ratio
+        }
+
+        # Split data for validation
+        split_idx = int(len(X) * 0.8) # Split of time series data
+        X_train, X_val = X[:split_idx], X[split_idx:]
+        y_train, y_val = y[:split_idx], y[split_idx:]
+
+        def objective(params):
+            """Custom objective/loss function combining RMSE and directional accuracy."""
+            # Unpack parameters
+            self.lr = params[0]
+            self.momentum = params[1]
+            self.alpha = params[2]
+            self.l1_ratio = params[3]
+
+            # Train with current params
+            self.fit(X_train, y_train)
+            
+            # Get predictions and actual values
+            preds = self.predict(X_val)
+            actual_changes = np.sign(np.diff(y_val)) # directional changes of actual values
+            pred_changes = np.sign(np.diff(preds)) # directional changes of predicted values
+
+            # Calculate metrics
+            rmse = root_mean_squared_error(y_val, preds)
+            
+            # Directional accuracy
+            min_len = min(len(actual_changes), len(pred_changes))
+            dir_acc = np.mean(actual_changes[:min_len] == pred_changes[:min_len]) # classfication accuracy
+            
+            # Combined loss (prioritize both accuracy and error)
+            return 0.7*rmse - 0.3*dir_acc # Rationale: if accuracy is high, the loss is low, and vice versa
+
+        # Optimization setup
+        initial_guess = [self.lr, self.momentum, self.alpha, self.l1_ratio]
+        bounds = list(param_bounds.values())
+        
+        # Constraints
+        constraints = [
+            {'type': 'ineq', 'fun': lambda x: x[0] - 0.001},  # lr > 0.001
+            {'type': 'ineq', 'fun': lambda x: 0.99 - x[1]},   # momentum < 0.99
+            {'type': 'ineq', 'fun': lambda x: x[2] - 0.0001}, # alpha > 0.0001
+        ]
+
+        # Run optimization
+        result = minimize(
+            fun=objective,
+            x0=initial_guess,
+            method='SLSQP',
+            bounds=bounds,
+            constraints=constraints,
+            options={'maxiter': n_iter}
+        )
+
+        # Restore original parameters if optimization fails
+        if not result.success:
+            self.__dict__.update(original_params)
+            return original_params
+
+        # Update with optimized parameters
+        optimized_params = {
+            'lr': result.x[0],
+            'momentum': result.x[1],
+            'alpha': result.x[2],
+            'l1_ratio': result.x[3]
+        }
+        self.__dict__.update(optimized_params) # Update model parameters after optimization (No need to reinitialize)
+        
+        return optimized_params
+
+
+
+
+
+
+
+
 
 # Modified ARIMAXGBoost Class
 class ARIMAXGBoost(BaseEstimator, RegressorMixin):
@@ -276,7 +380,7 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         self.gd_model = GradientDescentRegressor(
             n_iter=2000, lr=0.1, alpha=0.01, l1_ratio=0.01, momentum=0.9, rmsprop=True,random_state=42
         )
-        self.sgd_model = GradientDescentRegressor(n_iter=2000, lr=0.01, batch_size=32, rmsprop=False, random_state=42)
+        self.sgd_model = GradientDescentRegressor(n_iter=2000, lr=0.01, batch_size=32, rmsprop=False, random_state=42) # To ensure reproducibility
         self.lgbm_model = LGBMRegressor(
             n_jobs=-1, verbosity=-1, scale_pos_weight=2, loss_function="Logloss",random_state=42
         )
@@ -340,7 +444,10 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         except Exception as e:
             print(f"ARIMA failed: {str(e)}")
             self.arima_model_fit = None
-
+        
+        # Optimize hyperparameters for GD/SGD
+        optimized_params_gd = self.gd_model.optimize_hyperparameters(X_scaled, y) 
+        # optimized_params_sgd = self.sgd_model.optimize_hyperparameters(X_scaled, y)
         # Fit GD/SGD models
         self.gd_model.fit(X_scaled, y)
         self.sgd_model.fit(X_scaled, y)
@@ -409,7 +516,7 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         gd_pred = np.clip(self.gd_model.predict(X_scaled), -1e4, 1e4)
         sgd_pred = np.clip(self.sgd_model.predict(X_scaled), -1e4, 1e4)
 
-        # Boosting residuals
+        # Boosting residuals (give the fluttering model a chance)
         lgbm_pred = self.lgbm_model.predict(X_scaled)
         catboost_pred = self.catboost_model.predict(X_scaled)
 
@@ -425,3 +532,59 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
 
         # Final sanitization
         return np.nan_to_num(predictions, nan=np.nanmean(predictions))
+
+
+    def optimize_ensemble_weights(self, X, y):
+        """Optimize ensemble weights using PLR-style objective."""
+        # Initialize component models
+        self._fit_components(X, y)
+        
+        # Get base predictions
+        arima_pred = self.arima_model_fit.predict(n_periods=len(X))
+        gd_pred = self.gd_model.predict(X)
+        lgbm_pred = self.lgbm_model.predict(X)
+        
+        def objective(weights):
+            """Combination of RMSE and directional consistency."""
+            combined = (weights[0]*arima_pred + 
+                       weights[1]*gd_pred +
+                       weights[2]*lgbm_pred)
+            
+            # Calculate errors
+            rmse = root_mean_squared_error(y, combined)
+            
+            # Directional accuracy
+            actual_changes = np.sign(np.diff(y))
+            pred_changes = np.sign(np.diff(combined))
+            dir_acc = np.mean(actual_changes == pred_changes)
+            
+            return 0.6*rmse - 0.4*dir_acc
+
+        # Constraints and bounds
+        bounds = [(0, 1) for _ in range(3)]
+        constraints = {'type': 'eq', 'fun': lambda w: np.sum(w) - 1}
+        
+        # Optimize
+        result = minimize(
+            objective,
+            x0=[0.3, 0.4, 0.3],
+            method='SLSQP',
+            bounds=bounds,
+            constraints=[constraints]
+        )
+        
+        # Update weights
+        self.ensemble_weights = result.x
+        return result.x
+
+    def predict_with_optimized_weights(self, X):
+        """Updated predict with optimized weights"""
+        # Get component predictions
+        arima_pred = self.arima_model_fit.predict(n_periods=X.shape[0])
+        gd_pred = self.gd_model.predict(X)
+        lgbm_pred = self.lgbm_model.predict(X)
+        
+        # Apply optimized weights
+        return (self.ensemble_weights[0]*arima_pred +
+                self.ensemble_weights[1]*gd_pred +
+                self.ensemble_weights[2]*lgbm_pred)

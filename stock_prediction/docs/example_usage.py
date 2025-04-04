@@ -1,7 +1,7 @@
 import numpy as np
-np.random.seed(42) 
+# np.random.seed(42) 
 import random
-random.seed(42)
+# random.seed(42)
 from stock_prediction.core import StockPredictor
 from stock_prediction.utils.analysis import vizualize_correlation
 from datetime import date
@@ -98,11 +98,12 @@ lis = [
 ]
 random_num = np.random.randint(0, len(lis))
 random_lis = lis[random_num:random_num+1]
+print("Randomly selected companies:", random_lis)
 toc = time.time()
 StockPredictor.full_workflow(
     "2024-01-01",
     date.today(),
-    companies=["COP"],
+    companies=["EPD","EOG"],
     stock_settings=stock_settings,
     model="arimaxgb",
 )

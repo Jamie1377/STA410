@@ -12,6 +12,7 @@ from sklearn.metrics import (
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
 from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
 from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import pandas_market_calendars as mcal
 from sklearn.model_selection import train_test_split
@@ -24,6 +25,67 @@ from stock_prediction.utils import get_next_valid_date
 stock_data = yf.download("AAPL", start="2024-01-01", end=date.today())
 stock_data.columns = stock_data.columns.droplevel(1)
 stock_data
+
+# Add to models.py
+import requests
+import pandas as pd
+from datetime import datetime, timedelta
+
+
+class MarketSentimentAnalyzer:
+    """Get market sentiment scores using free financial APIs"""
+
+    def __init__(self, api_key=None):
+        self.api_key = api_key or "YOUR_API_KEY"  # Get free key from Alpha Vantage
+        self.sentiment_cache = {}
+
+    def get_alpha_vantage_sentiment(self, ticker="SPY"):
+        """Get news sentiment from Alpha Vantage's API"""
+        url = f"https://www.alphavantage.co/query?function=NEWS_SENTIMENT&tickers={ticker}&apikey={self.api_key}"
+
+        try:
+            response = requests.get(url)
+            data = response.json()
+            recent_items = data.get("feed", [])[:10]  # Last 10 articles
+
+            sentiment_scores = []
+            for item in recent_items:
+                for ticker_sentiment in item.get("ticker_sentiment", []):
+                    if ticker_sentiment["ticker"] == ticker:
+                        sentiment_scores.append(
+                            float(ticker_sentiment["ticker_sentiment_score"])
+                        )
+
+            return np.mean(sentiment_scores) if sentiment_scores else 0.5
+
+        except Exception as e:
+            print(f"Error fetching sentiment: {e}")
+            return 0.5  # Neutral fallback
+
+    def get_fear_greed_index(self):
+        """Get Crypto Fear & Greed Index (works for general market)"""
+        try:
+            response = requests.get("https://api.alternative.me/fng/")
+            data = response.json()
+            return int(data["data"][0]["value"])
+        except:
+            return 50  # Neutral fallback
+
+    def get_historical_sentiment(self, ticker, days):
+        """Get smoothed historical sentiment (cached)"""
+        if ticker in self.sentiment_cache:
+            return self.sentiment_cache[ticker]
+
+        dates = stock_data.index[-days:]
+        scores = []
+
+        for _ in range(days):
+            scores.append(self.get_alpha_vantage_sentiment(ticker))
+
+        # Create smoothed series
+        series = pd.Series(scores, index=dates).rolling(3).mean().bfill()
+        self.sentiment_cache[ticker] = series
+        return series
 
 
 class StockPredictor:
@@ -59,7 +121,7 @@ class StockPredictor:
         self.transformers = {}
         self.interval = interval
         self.history = []  # New attribute for error correction
-
+    ### Custom functions for technical indicators
     def _compute_rsi(self, window=14):
         """Custom RSI implementation"""
         delta = self.data["Close"].diff()
@@ -79,7 +141,6 @@ class StockPredictor:
 
     def load_data(self):
         """Load and prepare stock data with features"""
-        # np.random.seed(42)
         # Add momentum-specific features
         window = 15  # Standard momentum window
         self.data = yf.download(
@@ -91,16 +152,16 @@ class StockPredictor:
         self.data.columns = self.data.columns.get_level_values(0)  # Remove multi-index
         self.data.ffill()
         self.data.dropna()
-        # Add technical indicators
+
+        ### 1. Add rolling indicators
         self.data["MA_50"] = self.data["Close"].rolling(window=50).mean()
         self.data["MA_200"] = self.data["Close"].rolling(window=200).mean()
         self.data["MA_7"] = self.data["Close"].rolling(window=7).mean()
         self.data["MA_21"] = self.data["Close"].rolling(window=21).mean()
 
-        # Fourier transform
+        ### 2. Fourier transform
         data_FT = self.data.copy().reset_index()[["Date", "Close"]]
         close_fft = np.fft.fft(np.asarray(data_FT["Close"].tolist()))
-
         self.data["FT_real"] = np.real(close_fft)
         self.data["FT_img"] = np.imag(close_fft)
         # fft_df = pd.DataFrame({'fft': close_fft})
@@ -113,17 +174,14 @@ class StockPredictor:
         #     complex_num = np.fft.ifft(fft_list_m10)
         #     self.data[f'Fourier_trans_{num_}_comp_real'] = np.real(complex_num)
         #     self.data[f'Fourier_trans_{num_}_comp_img'] = np.imag(complex_num)
-
-        from sklearn.decomposition import PCA
-
+        ### Fourier Transformation PCA
         X_fft = np.column_stack([np.real(close_fft), np.imag(close_fft)])
         pca = PCA(n_components=2)  # Keep top 2 components
         X_pca = pca.fit_transform(X_fft)
-
         for i in range(X_pca.shape[1]):
             self.data[f"Fourier_PCA_{i}"] = X_pca[:, i]
 
-        # Add rolling statistics
+        ### 3. Add rolling statistics
         self.data["rolling_std"] = self.data["Close"].rolling(window=50).std()
         self.data["rolling_min"] = self.data["Close"].rolling(window=50).min()
         # self.data['rolling_max'] = self.data['Close'].rolling(window=window).max()
@@ -140,32 +198,35 @@ class StockPredictor:
         self.data.dropna(inplace=True)
         stock_data.index.name = "Date"  # Ensure the index is named "Date"
 
-        # Advanced Momentum
+
+        ### 4. Advanced Momentum
         self.data["RSI"] = self._compute_rsi(window=14)
         self.data["MACD"] = (
             self.data["Close"].ewm(span=12).mean()
             - self.data["Close"].ewm(span=26).mean()
         )
-        # 2. Williams %R
+        ### 5. Williams %R
         high_max = self.data["High"].rolling(window).max()
         low_min = self.data["Low"].rolling(window).min()
         self.data["Williams_%R"] = (
             (high_max - self.data["Close"]) / (high_max - low_min)
         ) * -100
 
-        # 3. Stochastic Oscillator
+        ### 6. Stochastic Oscillator
         self.data["Stochastic_%K"] = (
             (self.data["Close"] - low_min) / (high_max - low_min)
         ) * 100
         self.data["Stochastic_%D"] = self.data["Stochastic_%K"].rolling(3).mean()
 
-        # 4. Momentum Divergence Detection
+
+        ### 7. Momentum Divergence Detection
         self.data["Price_Change"] = self.data["Close"].diff()
         self.data["Momentum_Divergence"] = (
             (self.data["Price_Change"] * self.data["MACD"].diff()).rolling(5).sum()
         )
 
-        # Volatility-adjusted Channels
+
+        ### 8. Volatility-adjusted Channels
         self.data["ATR"] = self._compute_atr(window=14)
         self.data["Upper_Bollinger"] = (
             self.data["MA_21"] + 2 * self.data["Close"].rolling(50).std()
@@ -174,15 +235,18 @@ class StockPredictor:
             self.data["MA_21"] - 2 * self.data["Close"].rolling(50).std()
         )
 
-        # Volume-based Features
+
+        ### 9. Volume-based Features
         # self.data['OBV'] = self._compute_obv()
         self.data["VWAP"] = (
             self.data["Volume"]
             * (self.data["High"] + self.data["Low"] + self.data["Close"])
             / 3
         ).cumsum() / self.data["Volume"].cumsum()
+
+
+        ### 10. Economic Indicators
         sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date)["Close"]
-        # Economic Indicators
         # Fetch S&P 500 Index (GSPC) and Treasury Yield ETF (IEF) from Yahoo Finance
         sp500 = sp500 - sp500.mean()
         tnx = yf.download(
@@ -200,6 +264,9 @@ class StockPredictor:
         financials_sector = yf.download(
             "XLF", start=self.start_date, end=self.end_date, interval=self.interval
         )["Close"]
+        energy_sector = yf.download(
+            "XLE", start=self.start_date, end=self.end_date, interval=self.interval
+        )["Close"]
         vix = yf.download(
             "^VIX", start=self.start_date, end=self.end_date, interval=self.interval
         )["Close"]
@@ -213,6 +280,7 @@ class StockPredictor:
                     technology_sector,
                     financials_sector,
                     vix,
+                    energy_sector,
                 ],
                 axis=1,
                 keys=[
@@ -223,6 +291,7 @@ class StockPredictor:
                     "Tech",
                     "Fin",
                     "VIX",
+                    "Energy",
                 ],
             )
             .reset_index()
@@ -233,7 +302,8 @@ class StockPredictor:
         economic_data["Date"] = pd.to_datetime(economic_data["Date"])
         economic_data.set_index("Date", inplace=True)
 
-        # Get the NYSE trading schedule
+
+        ### 11. Whether the next or previous day is a non-trading day
         nyse = mcal.get_calendar("NYSE")
         schedule = nyse.schedule(start_date=self.start_date, end_date=self.end_date)
         economic_data["is_next_non_trading_day"] = economic_data.index.shift(
@@ -246,13 +316,16 @@ class StockPredictor:
             int
         )
 
+
+        # Merge with stock data
         self.data = pd.merge(self.data, economic_data, on="Date", how="left")
-        # self.data["Daily Returns"] = self.data["Close"].pct_change()
-        self.data["Daily Returns"] = (
-            self.data["Close"].pct_change(window) * 100
-        )  # Percentage change in the standard window for the momentum
+
+
+        ### 12. Volatility and Momentum
+        # self.data["Daily Returns"] = self.data["Close"].pct_change() # Percentage change
+        self.data["Daily Returns"] = (self.data["Close"].pct_change(window) * 100)  # Percentage change in the standard window for the momentum
         self.data["Volatility"] = self.data["Daily Returns"].rolling(window=20).std()
-        # 5. Adaptive Momentum Score
+        # Adaptive Momentum Score
         vol_weight = self.data["Volatility"] * 100
         self.data["Momentum_Score"] = (
             self.data["RSI"] * 0.4
@@ -276,19 +349,35 @@ class StockPredictor:
             "Volatility_Adj_Momentum"
         ].fillna(0.0)
 
-        # Prepare features for HMM
-
-        hmm = GaussianHMM(n_components=4, covariance_type="diag", n_iter=1000)
+        ### 13. Market Regime Detection by HMM
+        hmm = GaussianHMM(n_components=5, covariance_type="diag", n_iter=100)
         hmm.fit(self.data["Close"].pct_change().dropna().values.reshape(-1, 1))
         # Predict hidden states
         market_state = hmm.predict(
             self.data["Close"].pct_change().dropna().values.reshape(-1, 1)
         )
+        hmm_sp = GaussianHMM(n_components=5, covariance_type="diag", n_iter=100)
+        hmm_sp.fit(self.data["SP500"].pct_change().dropna().values.reshape(-1, 1))
+        market_state_sp500 = hmm_sp.predict(
+            self.data["SP500"].pct_change().dropna().values.reshape(-1, 1)
+        )
+        # Initialize the Market_State column
         self.data["Market_State"] = np.zeros(len(self.data))
-        if len(set(list(market_state))) != 1:
+        if (
+            len(set(list(market_state))) != 1
+            and len(set(list(market_state_sp500))) != 1
+        ):
             self.data["Market_State"][0] = 0
-            self.data["Market_State"].iloc[1:] = market_state
+            self.data.iloc[1:]["Market_State"] = market_state + market_state_sp500
 
+        ### 14. Sentiment Analysis
+        self.data["Market_Sentiment"] = 0.0
+        sentimement = MarketSentimentAnalyzer().get_historical_sentiment(
+            self.symbol, self.data.shape[0]
+        )
+        self.data["Market_Sentiment"] = sentimement
+
+        # Final cleaning
         self.data = self.data.dropna()
 
         return self

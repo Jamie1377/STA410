@@ -1,6 +1,14 @@
+# from stock_prediction.utils import seed_everything
+# seed_everything(42)
+import random
 import numpy as np
+
+
+
 import yfinance as yf
 import pandas as pd
+
+
 
 from numpy.polynomial import polynomial
 from datetime import date, timedelta
@@ -370,12 +378,12 @@ class StockPredictor:
             self.data["Market_State"][0] = 0
             self.data.iloc[1:]["Market_State"] = market_state + market_state_sp500
 
-        ### 14. Sentiment Analysis
-        self.data["Market_Sentiment"] = 0.0
-        sentimement = MarketSentimentAnalyzer().get_historical_sentiment(
-            self.symbol, self.data.shape[0]
-        )
-        self.data["Market_Sentiment"] = sentimement
+        # ### 14. Sentiment Analysis (Computationally expensive)
+        # self.data["Market_Sentiment"] = 0.0
+        # sentimement = MarketSentimentAnalyzer().get_historical_sentiment(
+        #     self.symbol, self.data.shape[0]
+        # )
+        # self.data["Market_Sentiment"] = sentimement
 
         # Final cleaning
         self.data = self.data.dropna()
@@ -425,27 +433,8 @@ class StockPredictor:
 
             # Polynomial features
             poly = PolynomialFeatures(degree=2)
-            # X_train_poly = poly.fit_transform(X_train_scaled)
-            # degree = 2
-            # coefs = polynomial.polyfit(X_train, y_train, deg=degree)
-            # X_train_poly = np.column_stack([X_train**i for i in range(degree + 1)])
-
-            # INCORRECT CODE (remove this)
-            degree = 2
-            X_train_poly = np.zeros_like(X_train)
-            X_test_poly = np.zeros_like(X_test)
-            for i in range(X_train.shape[1]):
-                coef = np.polynomial.polynomial.polyfit(
-                    X_train.iloc[:, i], y_train, degree
-                )
-                X_train_poly[:, i] = np.polynomial.polynomial.polyval(
-                    X_train.iloc[:, i], coef
-                )
-                X_test_poly[:, i] = np.polynomial.polynomial.polyval(
-                    X_test.iloc[:, i], coef
-                )
-
-            # X_test_poly = poly.transform(X_test_scaled)
+            X_train_poly = poly.fit_transform(X_train_scaled)
+            X_test_poly = poly.transform(X_test_scaled)
 
             # Train models
             models = {
@@ -556,11 +545,7 @@ class StockPredictor:
                     y_pred = model.predict(scaler.transform(X_test))
                     # 1 - (1 - model.score(X_test_scaled, y_test))
                 elif name == "polynomial":
-                    # y_pred = model.predict(poly.transform(scaler.transform(X_test)))
-
-                    degree = 2
-                    # X_test_poly = np.column_stack([X_test**i for i in range(degree + 1)])
-                    y_pred = model.predict(X_test_poly)
+                    y_pred = model.predict(poly.transform(scaler.transform(X_test)))
                     # 1 - (1 - model.score(X_test_poly, y_test))
                 elif name == "arimaxgb":
                     y_pred = model.predict(X_test)
@@ -596,17 +581,7 @@ class StockPredictor:
                 }
                 refit_models["linear"].fit(X, y)
                 refit_models["ridge"].fit(scaler.transform(X), y)
-                # refit_models["polynomial"].fit(poly.transform(scaler.transform(X)), y)
-                degree = 2
-                X_poly = np.zeros_like(X)  # Preserve the shape
-                for i in range(X.shape[1]):  # Loop over each feature
-                    coef = np.polynomial.polynomial.polyfit(
-                        X.iloc[:, i], y, degree
-                    )  # Fit polynomial
-                    X_poly[:, i] = np.polynomial.polynomial.polyval(
-                        X.iloc[:, i], coef
-                    )  # Transform X
-                refit_models["polynomial"].fit(X_poly, y)
+                refit_models["polynomial"].fit(poly.transform(scaler.transform(X)), y)
                 refit_models["arimaxgb"].fit(X, y)
                 self.models[predictor] = refit_models
 

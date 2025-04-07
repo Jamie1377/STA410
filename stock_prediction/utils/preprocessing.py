@@ -3,6 +3,21 @@ import pandas_market_calendars as mcal
 import pandas as pd
 from sklearn.tree import DecisionTreeRegressor
 from sklearn.metrics import root_mean_squared_error
+from sklearn import utils
+import numpy as np
+import os
+import random
+def seed_everything(seed):
+    random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    np.random.seed(seed)
+    utils.check_random_state(seed)
+    # torch.manual_seed(seed)
+    # torch.cuda.manual_seed(seed)
+    # torch.backends.cudnn.deterministic = True
+    # torch.backends.cudnn.benchmark = True
+
+
 def find_d(series):
     """Determine differencing order for stationarity"""
     d = 0

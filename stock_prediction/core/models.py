@@ -1,9 +1,7 @@
+from stock_prediction.utils import seed_everything
+seed_everything(42)
 import numpy as np
-
-np.random.seed(42)
 import random
-
-random.seed(42)
 from sklearn.base import BaseEstimator, RegressorMixin
 from statsmodels.tsa.statespace.sarimax import SARIMAX
 from sklearn.linear_model import LinearRegression
@@ -465,11 +463,11 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
             alpha=0.01,
             l1_ratio=0.01,
             momentum=0.9,
-            rmsprop=False,
+            rmsprop=True,
             random_state=42,
         )
         self.sgd_model = GradientDescentRegressor(
-            n_iter=1200, lr=0.01, batch_size=32, rmsprop=False, random_state=42
+            n_iter=1200, lr=0.01, batch_size=32, rmsprop=True, random_state=42
         )  # To ensure reproducibility
         self.lgbm_model = LGBMRegressor(
             n_jobs=-1,
@@ -541,8 +539,8 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
             self.arima_model_fit = None
 
         # Optimize hyperparameters for GD/SGD
-        # _ = self.gd_model.optimize_hyperparameters(X_scaled, y)
-        # optimized_params_sgd = self.sgd_model.optimize_hyperparameters(X_scaled, y)
+        _ = self.gd_model.optimize_hyperparameters(X_scaled, y)
+        optimized_params_sgd = self.sgd_model.optimize_hyperparameters(X_scaled, y)
         # Fit GD/SGD models
         self.gd_model.fit(X_scaled, y)
         self.sgd_model.fit(X_scaled, y)

@@ -1,6 +1,10 @@
+from stock_prediction.utils import seed_everything
+# seed_everything(42)
+
 from stock_prediction.core import ARIMAXGBoost, StockPredictor
 from datetime import date
 from sklearn.model_selection import train_test_split
+
 
 stock = StockPredictor("NVDA", "2024-01-01")
 stock.load_data()

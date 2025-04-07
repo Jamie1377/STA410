@@ -428,7 +428,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         self.__dict__.update(
             optimized_params
         )  # Update model parameters after optimization (No need to reinitialize)
-        print("Optimized parameters:", optimized_params)
+        print(f"Optimized parameters for {len(X)}, {optimized_params}")
         return optimized_params
 
 
@@ -463,7 +463,7 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
             alpha=0.01,
             l1_ratio=0.01,
             momentum=0.9,
-            rmsprop=True,
+            rmsprop=False,
             random_state=42,
         )
         self.sgd_model = GradientDescentRegressor(
@@ -540,7 +540,7 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
 
         # Optimize hyperparameters for GD/SGD
         _ = self.gd_model.optimize_hyperparameters(X_scaled, y)
-        optimized_params_sgd = self.sgd_model.optimize_hyperparameters(X_scaled, y)
+        _ = self.sgd_model.optimize_hyperparameters(X_scaled, y)
         # Fit GD/SGD models
         self.gd_model.fit(X_scaled, y)
         self.sgd_model.fit(X_scaled, y)

@@ -18,4 +18,6 @@ Requires-Dist: mplcursors
 Requires-Dist: scikit-optimize
 Requires-Dist: hmmlearn
 Requires-Dist: pmdarima
+Requires-Dist: plotly
+Requires-Dist: statsforecast
 Dynamic: requires-dist

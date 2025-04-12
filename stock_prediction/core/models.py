@@ -4,10 +4,16 @@ import numpy as np
 import random
 from sklearn.base import BaseEstimator, RegressorMixin
 from statsmodels.tsa.statespace.sarimax import SARIMAX
+from statsmodels.tsa.arima.model import ARIMA
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import root_mean_squared_error
 from sklearn.preprocessing import StandardScaler
 from scipy.optimize import minimize
+from neuralprophet import NeuralProphet
+from statsmodels.tsa.api import VAR
+from statsforecast import StatsForecast
+from statsforecast.models import AutoARIMA
+from statsforecast.utils import AirPassengersDF
 
 # Boosting Models
 from xgboost import XGBRegressor
@@ -428,7 +434,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         self.__dict__.update(
             optimized_params
         )  # Update model parameters after optimization (No need to reinitialize)
-        print(f"Optimized parameters for {n_iter}, {optimized_params}")
+        print(f"Optimized parameters for {n_iter} iterations, { {k: self.__dict__[k] for k in list(self.__dict__.keys())[:8]} }") #list(self.__dict__.items())[:8] 
         return optimized_params
 
 
@@ -496,6 +502,9 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         - y: Target variable (stock prices or price changes).
         - autoarima: Whether use auto_arima
         """
+        # {df} {prediction_intervals} {id_col} {time_col} {target_col}
+        df = y.copy().reset_index().reset_index().rename(columns={'index': 'unique_id','Date': 'ds', 'Close': 'y'})
+
         # Convert to numpy and clean data
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64).ravel()
@@ -534,6 +543,39 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
                 )
                 self.arima_model.initialize_approximate_diffuse()  # this line
                 self.arima_model_fit = self.arima_model.fit(disp=False, maxiter=200)
+
+                # self.arima_model = ARIMA(y, order=(0, 1, 4), seasonal_order=(2, 1, 2, 6))
+                # self.arima_model_fit = self.arima_model.fit()
+
+
+                # self.arima_model_fit =  StatsForecast(
+                #     models=[AutoARIMA(season_length=X.shape[0], stepwise=True)],
+                #     freq='D',
+                # ).fit(df)
+        
+
+
+
+                
+
+                # self.arima_model = NeuralProphet(growth="linear", n_changepoints=0, yearly_seasonality=False, weekly_seasonality=False, daily_seasonality=True)
+                # self.arima_model.fit(y, freq="D")
+                # # data need to be in the format of dataframe
+                # self.df_future =  self.arima_model.make_future_dataframe(df, periods=X.shape[0])
+
+                # # MERGE X AND DF 
+                # import pandas as pd
+                # df = pd.concat([df, X], axis=0, join="inner",keys=["ds"])
+                # self.arima_model  = VAR(df.iloc[:,0], df.iloc[:,1], df.iloc[:,2:])
+                # self.arima_model_fit = self.arima_model.fit(maxlags=2, ic="aic")
+                
+                
+
+
+
+
+
+
         except Exception as e:
             print(f"ARIMA failed: {str(e)}")
             self.arima_model_fit = None
@@ -595,7 +637,14 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
                         n_periods=X.shape[0], return_conf_int=False
                     )
                 else:
-                    arima_pred = self.arima_model_fit.forecast(steps=X.shape[0])
+                    arima_pred = self.arima_model_fit.forecast(steps=X.shape[0]) # for ordinary SARIMAX
+                    # arima_pred = self.arima_model_fit.predict(self.df_future)
+                    # arima_pred = self.arima_model_fit.forecast(
+                    #     steps=X.shape[0], exogenous=X_scaled
+                    # )
+                    # arima_pred = self.arima_model_fit.predict(h=X.shape[0], exogenous=X_scaled)
+
+
             except:
                 arima_pred = np.zeros(X.shape[0])
         else:

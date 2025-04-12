@@ -20,7 +20,9 @@ setup(
         "mplcursors",
         "scikit-optimize",
         "hmmlearn",
-        "pmdarima"
+        "pmdarima",
+        "plotly",
+        "statsforecast"
 
 
 

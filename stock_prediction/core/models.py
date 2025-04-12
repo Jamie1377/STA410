@@ -1,32 +1,35 @@
 from stock_prediction.utils import seed_everything
-seed_everything(42)
+seed_everything(42) # Control the randomness
 import numpy as np
 import random
 from sklearn.base import BaseEstimator, RegressorMixin
-from statsmodels.tsa.statespace.sarimax import SARIMAX
-from statsmodels.tsa.arima.model import ARIMA
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import root_mean_squared_error
 from sklearn.preprocessing import StandardScaler
 from scipy.optimize import minimize
-from neuralprophet import NeuralProphet
-from statsmodels.tsa.api import VAR
-from statsforecast import StatsForecast
-from statsforecast.models import AutoARIMA
-from statsforecast.utils import AirPassengersDF
 
 # Boosting Models
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
 from catboost import CatBoostRegressor
 
-
 # Time Series Models
+from statsmodels.tsa.statespace.sarimax import SARIMAX
+from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.holtwinters import ExponentialSmoothing, SimpleExpSmoothing
 import pmdarima as pm
-from pmdarima import auto_arima
+from pmdarima import auto_arima # Computationally expensive
 
-# np.random.seed(42)
+# Alternative of ARIMA or Time Series Models
+from neuralprophet import NeuralProphet
+from statsmodels.tsa.api import VAR
+from statsforecast import StatsForecast
+from statsforecast.models import AutoARIMA
+from statsforecast.utils import AirPassengersDF
+
+# Suppress warnings
+import warnings
+from scipy.optimize import OptimizeWarning
 
 
 # Custom Gradient Descent Implementations
@@ -408,6 +411,8 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
             {"type": "ineq", "fun": lambda x: 1 - x[4]},  # rmsprop <= 1
         ]
 
+        # Suppress warnings from scipy.optimize
+        warnings.filterwarnings("ignore", category=OptimizeWarning)
         # Run optimization
         result = minimize(
             fun=objective,
@@ -415,7 +420,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
             method="SLSQP",
             bounds=bounds,
             constraints=constraints,
-            options={"maxiter": n_iter},
+            options={"maxiter": n_iter, "disp": False},
         )
 
         # Restore original parameters if optimization fails

@@ -829,45 +829,38 @@ class StockPredictor:
 
                 # Prepare input data - use last available information
                 if step == 0:
-                    # pred_input = last_pred_row[close_features].values
-                    # backtest_input = last_backtest_row[close_features].values
-                    # raw_backtest_input = last_backtest_row[close_features].values
-
                     # Use averaged input from last 'horizon' rows
-                    if len(prediction) >= horizon:
-                        pred_input = (
-                            prediction[close_features]
-                            .iloc[-horizon:]
-                            .mean(axis=0)
-                            .values
-                        )
-                    else:
-                        pred_input = last_pred_row[close_features].values
+                    # for prediction
+                    # if len(prediction) >= horizon:
+                    #     pred_input = (
+                    #         prediction[close_features]
+                    #         .iloc[-horizon:]
+                    #         .mean(axis=0)
+                    #         .values
+                    #     )
+                    # else:
+                    #     pred_input = last_pred_row[close_features].values
+                    # # for backtest
+                    # if len(backtest) >= horizon:
+                    #     backtest_input = (
+                    #         backtest[close_features].iloc[-horizon:].mean(axis=0).values
+                    #     )
+                    #     raw_backtest_input = (
+                    #         backtest[close_features].iloc[-horizon:].mean(axis=0).values
+                    #     )
+                    # else:
+                    #     backtest_input = last_backtest_row[close_features].values
+                    #     raw_backtest_input = last_backtest_row[close_features].values
 
-                    if len(backtest) >= horizon:
-                        backtest_input = (
-                            backtest[close_features].iloc[-horizon:].mean(axis=0).values
-                        )
-                        raw_backtest_input = (
-                            backtest[close_features].iloc[-horizon:].mean(axis=0).values
-                        )
-                    else:
-                        backtest_input = last_backtest_row[close_features].values
-                        raw_backtest_input = last_backtest_row[close_features].values
-                # else:
-                # # Construct from previous predictions
-                # pred_input = np.array([
-                #     pred_array[step-1, predictor_indices[feat]]
-                #     for feat in close_features
-                # ])
-                # backtest_input = np.array([
-                #     backtest_array[step-1, predictor_indices[feat]]
-                #     for feat in close_features
-                # ])
-                # raw_backtest_input = np.array([
-                #     raw_backtest_array[step-1, predictor_indices[feat]]
-                #     for feat in close_features
-                # ])
+                    # May only use last row in case a huge change in price in the last horizon (The mean cannot reflect the change)
+                    # so we use the last row instead of the mean 
+                    # Want data to be a dataframe
+
+                    pred_input = prediction[close_features].iloc[-1].values
+                    backtest_input = backtest[close_features].iloc[-1].values
+                    raw_backtest_input = backtest[close_features].iloc[-1].values
+
+
                 else:
                     # For subsequent steps, if we have enough predicted values, use their average
                     if step >= horizon:

@@ -21,7 +21,6 @@ setup(
         "scikit-optimize",
         "hmmlearn",
         "pmdarima",
-        "plotly",
         "statsforecast"
 
 

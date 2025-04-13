@@ -21,7 +21,7 @@ import pmdarima as pm
 from pmdarima import auto_arima # Computationally expensive
 
 # Alternative of ARIMA or Time Series Models
-from neuralprophet import NeuralProphet
+# from neuralprophet import NeuralProphet
 from statsmodels.tsa.api import VAR
 from statsforecast import StatsForecast
 from statsforecast.models import AutoARIMA

@@ -387,6 +387,9 @@ class StockPredictor:
 
         # Final cleaning
         self.data = self.data.dropna()
+        if len(self.data) < 50:
+            print("Not enough data to train the model.")
+            raise ValueError("Not enough data to train the model.")
 
         return self
 
@@ -562,9 +565,12 @@ class StockPredictor:
                 print(f"{predictor} - {name.capitalize()} Model:")
                 print(f"  Test Mean Squared Error: {rmse:.4f}")
                 print(f"  R² Score: {r2:.4f}")
+                if name == 'arimaxgb' and r2 < 0.8 and predictor == "Close":
+                    raise ValueError("ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters.")
             print(
                 "-----------------------------------------------------------------------------------------"
             )
+            
 
             # Store models, scalers, and transformers
             self.models[predictor] = models

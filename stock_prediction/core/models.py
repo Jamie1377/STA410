@@ -319,7 +319,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
 
         return self.coef_
 
-    def optimize_hyperparameters(self, X, y, param_bounds=None, n_iter=100):
+    def optimize_hyperparameters(self, X, y, param_bounds=None, n_iter=2000):
         """Optimize GD/SGD hyperparameters using directional accuracy objective. The direction
         of the prediction is more important than the actual value.
         This is a custom objective function that combines RMSE and directional accuracy.

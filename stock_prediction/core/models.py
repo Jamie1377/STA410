@@ -1,12 +1,15 @@
 from stock_prediction.utils import seed_everything
-seed_everything(42) # Control the randomness
+
+seed_everything(42)  # Control the randomness
 import numpy as np
 import random
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.linear_model import LinearRegression
-from sklearn.metrics import root_mean_squared_error
+from sklearn.metrics import root_mean_squared_error, mean_absolute_percentage_error
 from sklearn.preprocessing import StandardScaler
 from scipy.optimize import minimize
+from scipy.optimize import minimize
+from scipy.linalg import block_diag
 
 # Boosting Models
 from xgboost import XGBRegressor
@@ -18,10 +21,10 @@ from statsmodels.tsa.statespace.sarimax import SARIMAX
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.holtwinters import ExponentialSmoothing, SimpleExpSmoothing
 import pmdarima as pm
-from pmdarima import auto_arima # Computationally expensive
+from pmdarima import auto_arima  # Computationally expensive
+from pygam import LinearGAM, s, f
 
 # Alternative of ARIMA or Time Series Models
-# from neuralprophet import NeuralProphet
 from statsmodels.tsa.api import VAR
 from statsforecast import StatsForecast
 from statsforecast.models import AutoARIMA
@@ -30,7 +33,6 @@ from statsforecast.utils import AirPassengersDF
 # Suppress warnings
 import warnings
 from scipy.optimize import OptimizeWarning
-
 
 # Custom Gradient Descent Implementations
 class GradientDescentRegressor(BaseEstimator, RegressorMixin):
@@ -83,6 +85,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         self.sq_grad_avg = None
         self.gradients_gd = None
         self.gradients_sgd = None
+        self.weights = None  # Weights for log weights
 
     def _add_bias(self, X):
         """Add bias term to input features"""
@@ -127,7 +130,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         # Initialize velocity and sq_grad_avg as zero vectors
         self.velocity = np.zeros(n_features)
         self.sq_grad_avg = np.zeros(n_features)
-
+        
         for _ in range(self.n_iter):
             self.gradients_gd = 2 / n_samples * X_b.T @ (X_b @ self.coef_ - y)
             self.gradients_gd += self.alpha * self.coef_  # L2 regularization
@@ -155,6 +158,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
             # Update with momentum
             # velocity = self.momentum * velocity + (1 - self.momentum) * self.gradients_gd
             # self.coef_ -= self.lr * velocity
+
             self.coef_ -= self.velocity
 
             if self.newton:
@@ -183,15 +187,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         X_b = self._add_bias(X)
         n_samples, n_features = X_b.shape
         self.coef_ = np.zeros(n_features)
-        # self.velocity = np.zeros_like(self.coef_)
-        # self.sq_grad_avg = np.zeros_like(self.coef_)
-
-        # # Initialize velocity and sq_grad_avg if not done
-        # if self.velocity is None:
-        #     self.velocity = np.zeros_like(self.coef_)
-        # if self.sq_grad_avg is None:
-        #     self.sq_grad_avg = np.zeros_like(self.coef_)
-
+       
         # Initialize velocity and sq_grad_avg as zero vectors
         self.velocity = np.zeros(n_features)
         self.sq_grad_avg = np.zeros(n_features)
@@ -253,33 +249,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         X_b = self._add_bias(X)
         return X_b @ np.r_[self.intercept_, self.coef_]
 
-    # def newton_step(self, X_b, y):
-    #     # np.random.seed(42)
-    #     """Perform a Newton step
-
-    #     Parameters:
-    #         X_b (ndarray): Features
-    #         y (ndarray): Target
-
-    #     Returns:
-    #         ndarray: Updated coefficients
-    #     """
-    #     # Compute Hessian (O(n³) - use carefully!)
-    #     hessian = 2 / X_b.shape[0] * X_b.T @ X_b + self.alpha * np.eye(
-    #         X_b.shape[1]
-    #     )  # More complex as the need of Hessian than SGD
-    #     hessian_inv = np.linalg.inv(hessian)
-
-    #     def compute_gradients(X_b, y):
-    #         """Compute gradients"""
-    #         return (
-    #             2 / X_b.shape[0] * X_b.T @ (X_b @ self.coef_ - y)
-    #             + self.alpha * self.coef_
-    #             + self.l1_ratio * np.sign(self.coef_)
-    #         )  # L1 and L2 regularization
-
-    #     grad = compute_gradients(X_b, y)
-    #     self.coef_ -= hessian_inv @ grad  # Use QR
+    
 
     def newton_step(
         self, X_b, y
@@ -319,7 +289,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
 
         return self.coef_
 
-    def optimize_hyperparameters(self, X, y, param_bounds=None, n_iter=2000):
+    def optimize_hyperparameters(self, X, y, param_bounds=None, n_iter=1000):
         """Optimize GD/SGD hyperparameters using directional accuracy objective. The direction
         of the prediction is more important than the actual value.
         This is a custom objective function that combines RMSE and directional accuracy.
@@ -380,6 +350,11 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
 
             # Calculate metrics
             rmse = root_mean_squared_error(y_val, preds)
+            mape = mean_absolute_percentage_error(y_val, preds)
+
+            # Volatility (standard deviation of returns)
+            volatility = np.diff(preds) - np.diff(preds).mean()
+            volatility = np.std(volatility)
 
             # Directional accuracy
             min_len = min(len(actual_changes), len(pred_changes))
@@ -389,8 +364,10 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
 
             # Combined loss (prioritize both accuracy and error)
             return (
-                0.7 * rmse - 0.3 * dir_acc
-            )  # Rationale: if accuracy is high, the loss is low, and vice versa. In other words, if the model's directions are not accurate, the loss is high so it is penalized
+                0.7 * rmse + 0.3 * mape - 0.2 * dir_acc - 0.1 * volatility
+            )  
+        # Rationale: if accuracy is high, the loss is low, and vice versa. In other words, if the model's directions are not accurate, the loss is high so it is penalized
+        #  Volatility is encouraged to be high so that the model can be more flexible and adaptive to the market changes. The model is penalized if it is too conservative and not adaptive to the market changes.
 
         # Optimization setup
         initial_guess = [
@@ -404,9 +381,10 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
 
         # Constraints
         constraints = [
-            {"type": "ineq", "fun": lambda x: x[0] - 0.001},  # lr > 0.001
-            {"type": "ineq", "fun": lambda x: 0.99 - x[1]},  # momentum < 0.99
+            {"type": "ineq", "fun": lambda x: x[0] - 0.00001},  # lr > 0.00001
+            {"type": "ineq", "fun": lambda x: 0.999 - x[1]},  # momentum < 0.99
             {"type": "ineq", "fun": lambda x: x[2] - 0.0001},  # alpha > 0.0001
+            {"type": "ineq", "fun": lambda x: x[3] - 0.0001},  # l1_ratio > 0.0001
             {"type": "ineq", "fun": lambda x: x[4] - 0},  # rmsprop >= 0
             {"type": "ineq", "fun": lambda x: 1 - x[4]},  # rmsprop <= 1
         ]
@@ -439,7 +417,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         self.__dict__.update(
             optimized_params
         )  # Update model parameters after optimization (No need to reinitialize)
-        print(f"Optimized parameters for {n_iter} iterations, { {k: self.__dict__[k] for k in list(self.__dict__.keys())[:8]} }") #list(self.__dict__.items())[:8] 
+        # print(f"Optimized parameters for {n_iter} iterations, { {k: self.__dict__[k] for k in list(self.__dict__.keys())[:8]} }") #list(self.__dict__.items())[:8]
         return optimized_params
 
 
@@ -507,9 +485,6 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         - y: Target variable (stock prices or price changes).
         - autoarima: Whether use auto_arima
         """
-        # {df} {prediction_intervals} {id_col} {time_col} {target_col}
-        df = y.copy().reset_index().reset_index().rename(columns={'index': 'unique_id','Date': 'ds', 'Close': 'y'})
-
         # Convert to numpy and clean data
         X = np.asarray(X, dtype=np.float64)
         y = np.asarray(y, dtype=np.float64).ravel()
@@ -549,45 +524,19 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
                 self.arima_model.initialize_approximate_diffuse()  # this line
                 self.arima_model_fit = self.arima_model.fit(disp=False, maxiter=200)
 
-                # self.arima_model = ARIMA(y, order=(0, 1, 4), seasonal_order=(2, 1, 2, 6))
-                # self.arima_model_fit = self.arima_model.fit()
-
-
-                # self.arima_model_fit =  StatsForecast(
-                #     models=[AutoARIMA(season_length=X.shape[0], stepwise=True)],
-                #     freq='D',
-                # ).fit(df)
-        
-
-
-
-                
-
-                # self.arima_model = NeuralProphet(growth="linear", n_changepoints=0, yearly_seasonality=False, weekly_seasonality=False, daily_seasonality=True)
-                # self.arima_model.fit(y, freq="D")
-                # # data need to be in the format of dataframe
-                # self.df_future =  self.arima_model.make_future_dataframe(df, periods=X.shape[0])
-
-                # # MERGE X AND DF 
-                # import pandas as pd
-                # df = pd.concat([df, X], axis=0, join="inner",keys=["ds"])
-                # self.arima_model  = VAR(df.iloc[:,0], df.iloc[:,1], df.iloc[:,2:])
-                # self.arima_model_fit = self.arima_model.fit(maxlags=2, ic="aic")
-                
-                
-
-
-
-
-
-
         except Exception as e:
             print(f"ARIMA failed: {str(e)}")
             self.arima_model_fit = None
 
         # Optimize hyperparameters for GD/SGD
         _ = self.gd_model.optimize_hyperparameters(X_scaled, y)
+        print(
+            f"GD model parameters: { {k: self.gd_model.__dict__[k] for k in list(self.gd_model.__dict__.keys())[:8]} }"
+        )
         _ = self.sgd_model.optimize_hyperparameters(X_scaled, y)
+        print(
+            f"SGD model parameters: { {k: self.sgd_model.__dict__[k] for k in list(self.sgd_model.__dict__.keys())[:8]}}"
+        )
         # Fit GD/SGD models
         self.gd_model.fit(X_scaled, y)
         self.sgd_model.fit(X_scaled, y)
@@ -598,10 +547,16 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
             smoothing_level=0.6, optimized=False
         )
 
-        # Fit residual models
+        # Fit residual models (Allow flexibility)
         residuals = y - self.gd_model.predict(X_scaled)
         self.lgbm_model.fit(X_scaled, residuals)
         self.catboost_model.fit(X_scaled, residuals)
+        # # Create and fit GAM
+        # self.gam = LinearGAM(s(0) + s(1) + f(2))
+        # self.gam.fit(X_scaled, residuals)
+        print(
+            f"residuals mean: {np.sum(residuals)/len(residuals)}"
+        )  # residuals mean (by day) on natural scale
 
     def predict(self, X):
         """
@@ -642,14 +597,9 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
                         n_periods=X.shape[0], return_conf_int=False
                     )
                 else:
-                    arima_pred = self.arima_model_fit.forecast(steps=X.shape[0]) # for ordinary SARIMAX
-                    # arima_pred = self.arima_model_fit.predict(self.df_future)
-                    # arima_pred = self.arima_model_fit.forecast(
-                    #     steps=X.shape[0], exogenous=X_scaled
-                    # )
-                    # arima_pred = self.arima_model_fit.predict(h=X.shape[0], exogenous=X_scaled)
-
-
+                    arima_pred = self.arima_model_fit.forecast(
+                        steps=X.shape[0]
+                    )  
             except:
                 arima_pred = np.zeros(X.shape[0])
         else:
@@ -667,71 +617,19 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         lgbm_pred = self.lgbm_model.predict(X_scaled)
         catboost_pred = self.catboost_model.predict(X_scaled)
 
+        # GAM predictions
+        # gam_pred = self.gam.predict(X_scaled)
+
+
         # Modify predictions based on momentum regime
         predictions = (
             0.20 * arima_pred * (1 + 0.02 * momentum_regime)
             + 0.10 * (hwes_forecast * 0.6 + ses2_forecast * 0.4)
             + 0.70 * (gd_pred * 0.8 + sgd_pred * 0.2) * (1 + 0.02 * momentum_regime)
-            + 0.05 * lgbm_pred
-            + 0.05 * catboost_pred
+            + 0.02 * lgbm_pred
+            + 0.02 * catboost_pred
+            # + 0.02 * gam_pred
         )
 
         # Final sanitization
         return np.nan_to_num(predictions, nan=np.nanmean(predictions))
-
-    def optimize_ensemble_weights(self, X, y):
-        """Optimize ensemble weights using PLR-style objective."""
-        # Initialize component models
-        self._fit_components(X, y)
-
-        # Get base predictions
-        arima_pred = self.arima_model_fit.predict(n_periods=len(X))
-        gd_pred = self.gd_model.predict(X)
-        lgbm_pred = self.lgbm_model.predict(X)
-
-        def objective(weights):
-            """Combination of RMSE and directional consistency."""
-            combined = (
-                weights[0] * arima_pred + weights[1] * gd_pred + weights[2] * lgbm_pred
-            )
-
-            # Calculate errors
-            rmse = root_mean_squared_error(y, combined)
-
-            # Directional accuracy
-            actual_changes = np.sign(np.diff(y))
-            pred_changes = np.sign(np.diff(combined))
-            dir_acc = np.mean(actual_changes == pred_changes)
-
-            return 0.6 * rmse - 0.4 * dir_acc
-
-        # Constraints and bounds
-        bounds = [(0, 1) for _ in range(3)]
-        constraints = {"type": "eq", "fun": lambda w: np.sum(w) - 1}
-
-        # Optimize
-        result = minimize(
-            objective,
-            x0=[0.3, 0.4, 0.3],
-            method="SLSQP",
-            bounds=bounds,
-            constraints=[constraints],
-        )
-
-        # Update weights
-        self.ensemble_weights = result.x
-        return result.x
-
-    def predict_with_optimized_weights(self, X):
-        """Updated predict with optimized weights"""
-        # Get component predictions
-        arima_pred = self.arima_model_fit.predict(n_periods=X.shape[0])
-        gd_pred = self.gd_model.predict(X)
-        lgbm_pred = self.lgbm_model.predict(X)
-
-        # Apply optimized weights
-        return (
-            self.ensemble_weights[0] * arima_pred
-            + self.ensemble_weights[1] * gd_pred
-            + self.ensemble_weights[2] * lgbm_pred
-        )

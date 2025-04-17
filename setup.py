@@ -22,6 +22,7 @@ setup(
         "hmmlearn",
         "pmdarima",
         "statsforecast"
+        'pygam',
 
 
 

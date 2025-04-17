@@ -1,15 +1,7 @@
-# from stock_prediction.utils import seed_everything
-# seed_everything(42)
 import random
 import numpy as np
-
-
-
 import yfinance as yf
 import pandas as pd
-
-
-
 from numpy.polynomial import polynomial
 from datetime import date, timedelta
 from sklearn.metrics import (
@@ -26,6 +18,7 @@ import pandas_market_calendars as mcal
 from sklearn.model_selection import train_test_split
 from hmmlearn.hmm import GaussianHMM
 
+# Custom imports
 from stock_prediction.core import ARIMAXGBoost
 from stock_prediction.utils import get_next_valid_date
 
@@ -37,10 +30,10 @@ stock_data
 # Add to models.py
 import requests
 import pandas as pd
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 
-class MarketSentimentAnalyzer:
+class MarketSentimentAnalyzer:  # Compuationally expensive, try to use volatility to replace the sentiment
     """Get market sentiment scores using free financial APIs"""
 
     def __init__(self, api_key=None):
@@ -129,7 +122,7 @@ class StockPredictor:
         self.transformers = {}
         self.interval = interval
         self.history = []  # New attribute for error correction
-    ### Custom functions for technical indicators
+
     def _compute_rsi(self, window=14):
         """Custom RSI implementation"""
         delta = self.data["Close"].diff()
@@ -172,6 +165,8 @@ class StockPredictor:
         close_fft = np.fft.fft(np.asarray(data_FT["Close"].tolist()))
         self.data["FT_real"] = np.real(close_fft)
         self.data["FT_img"] = np.imag(close_fft)
+
+        # # Fourier Transformation is not used
         # fft_df = pd.DataFrame({'fft': close_fft})
         # fft_df['absolute'] = fft_df['fft'].apply(lambda x: np.abs(x))
         # fft_df['angle'] = fft_df['fft'].apply(lambda x: np.angle(x))
@@ -182,6 +177,7 @@ class StockPredictor:
         #     complex_num = np.fft.ifft(fft_list_m10)
         #     self.data[f'Fourier_trans_{num_}_comp_real'] = np.real(complex_num)
         #     self.data[f'Fourier_trans_{num_}_comp_img'] = np.imag(complex_num)
+
         ### Fourier Transformation PCA
         X_fft = np.column_stack([np.real(close_fft), np.imag(close_fft)])
         pca = PCA(n_components=2)  # Keep top 2 components
@@ -206,7 +202,6 @@ class StockPredictor:
         self.data.dropna(inplace=True)
         stock_data.index.name = "Date"  # Ensure the index is named "Date"
 
-
         ### 4. Advanced Momentum
         self.data["RSI"] = self._compute_rsi(window=14)
         self.data["MACD"] = (
@@ -226,13 +221,11 @@ class StockPredictor:
         ) * 100
         self.data["Stochastic_%D"] = self.data["Stochastic_%K"].rolling(3).mean()
 
-
         ### 7. Momentum Divergence Detection
         self.data["Price_Change"] = self.data["Close"].diff()
         self.data["Momentum_Divergence"] = (
             (self.data["Price_Change"] * self.data["MACD"].diff()).rolling(5).sum()
         )
-
 
         ### 8. Volatility-adjusted Channels
         self.data["ATR"] = self._compute_atr(window=14)
@@ -243,7 +236,6 @@ class StockPredictor:
             self.data["MA_21"] - 2 * self.data["Close"].rolling(50).std()
         )
 
-
         ### 9. Volume-based Features
         # self.data['OBV'] = self._compute_obv()
         self.data["VWAP"] = (
@@ -251,7 +243,6 @@ class StockPredictor:
             * (self.data["High"] + self.data["Low"] + self.data["Close"])
             / 3
         ).cumsum() / self.data["Volume"].cumsum()
-
 
         ### 10. Economic Indicators
         sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date)["Close"]
@@ -310,7 +301,6 @@ class StockPredictor:
         economic_data["Date"] = pd.to_datetime(economic_data["Date"])
         economic_data.set_index("Date", inplace=True)
 
-
         ### 11. Whether the next or previous day is a non-trading day
         nyse = mcal.get_calendar("NYSE")
         schedule = nyse.schedule(start_date=self.start_date, end_date=self.end_date)
@@ -324,14 +314,14 @@ class StockPredictor:
             int
         )
 
-
         # Merge with stock data
         self.data = pd.merge(self.data, economic_data, on="Date", how="left")
 
-
         ### 12. Volatility and Momentum
         # self.data["Daily Returns"] = self.data["Close"].pct_change() # Percentage change
-        self.data["Daily Returns"] = (self.data["Close"].pct_change(window) * 100)  # Percentage change in the standard window for the momentum
+        self.data["Daily Returns"] = (
+            self.data["Close"].pct_change(window) * 100
+        )  # Percentage change in the standard window for the momentum
         self.data["Volatility"] = self.data["Daily Returns"].rolling(window=20).std()
         # Adaptive Momentum Score
         vol_weight = self.data["Volatility"] * 100
@@ -393,6 +383,7 @@ class StockPredictor:
 
         return self
 
+
     def prepare_models(
         self, predictors: list[str], horizon, weight: bool = False, refit: bool = True
     ):
@@ -447,97 +438,11 @@ class StockPredictor:
                 "arimaxgb": ARIMAXGBoost(),
             }
 
-            # Feature importance
-            feature_weights = np.ones(len(features))
-
-            from sklearn.ensemble import (
-                RandomForestRegressor,
-                GradientBoostingRegressor,
-            )
-            from sklearn.model_selection import cross_val_score
-
-            def advanced_feature_weighting(X, y):
-                """Modified to ensure stable weights"""
-                models = [
-                    RandomForestRegressor(n_estimators=100),
-                    GradientBoostingRegressor(n_estimators=100),
-                    ExtraTreesRegressor(n_estimators=100),
-                ]
-
-                # Calculate normalized importances
-                all_importances = []
-                for model in models:
-                    model.fit(X, y)
-                    if hasattr(model, "feature_importances_"):
-                        imp = model.feature_importances_
-                    else:
-                        imp = np.abs(model.coef_)  # For linear models
-                    all_importances.append(imp / np.sum(imp))  # Normalized
-
-                # Geometric mean instead of average
-                avg_importances = np.exp(
-                    np.mean(np.log(all_importances + 1e-8), axis=0)
-                )
-
-                # Cross-validation weighting
-                cv_scores = []
-                for model in models:
-                    scores = cross_val_score(
-                        model, X, y, cv=5, scoring="neg_mean_squared_error"
-                    )
-                    cv_scores.append(-np.mean(scores))
-
-                # Softmax weighting
-                model_weights = np.exp(cv_scores) / np.sum(np.exp(cv_scores))
-
-                # Final weights
-                weighted_importances = np.zeros_like(avg_importances)
-                for i, (imp, mw) in enumerate(zip(all_importances, model_weights)):
-                    weighted_importances += imp * mw
-
-                return weighted_importances / np.sum(weighted_importances)
-
-            if weight is True:
-                feature_weights = advanced_feature_weighting(X_train, y_train)
-
-                # 1. Ensure positive normalized weights
-                feature_weights = np.abs(feature_weights)  # Force non-negative
-                feature_weights += 1e-8  # Prevent zero division
-                feature_weights /= np.sum(feature_weights)  # Normalize to sum=1
-
-                # Debug: Print feature weights
-                print(f"\nFeature weights for {predictor}:")
-                for feat, w in zip(features, feature_weights):
-                    print(f"{feat}: {w:.4f}")
-
-                # 2. Apply weights BEFORE scaling
-                X_train_weighted = X_train.copy()
-                for i, feat in enumerate(features):
-                    X_train_weighted[feat] *= (
-                        feature_weights[i] * 100
-                    )  # Scale to preserve magnitude
-
-                # 3. Use same scaler for train/test
-                scaler_1 = StandardScaler()
-                X_train_scaled_weighted = scaler_1.fit_transform(X_train_weighted)
-                # X_test_scaled = scaler_1.transform(X_test[features])  # Use original test features
-
-                # X_train_scaled_weighted = scaler.transform(X_train_weighted)
-                X_train_poly_weighted = poly.transform(X_train_scaled_weighted)
-
-                # Weighted fitting for applicable models
-                models["linear"].fit(X_train_weighted, y_train)
-                models["ridge"].fit(X_train_scaled_weighted, y_train)
-                models["polynomial"].fit(X_train_poly_weighted, y_train)
-                models["arimaxgb"].fit(X_train_weighted, y_train)
-
-            else:
-
-                # Fit models
-                models["linear"].fit(X_train, y_train)
-                models["ridge"].fit(X_train_scaled, y_train)
-                models["polynomial"].fit(X_train_poly, y_train)
-                models["arimaxgb"].fit(X_train, y_train)
+            # Fit models
+            models["linear"].fit(X_train, y_train)
+            models["ridge"].fit(X_train_scaled, y_train)
+            models["polynomial"].fit(X_train_poly, y_train)
+            models["arimaxgb"].fit(X_train, y_train)
 
             for name, model in models.items():
 
@@ -565,12 +470,13 @@ class StockPredictor:
                 print(f"{predictor} - {name.capitalize()} Model:")
                 print(f"  Test Mean Squared Error: {rmse:.4f}")
                 print(f"  R² Score: {r2:.4f}")
-                if name == 'arimaxgb' and r2 < 0.8 and predictor == "Close":
-                    raise ValueError("ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters.")
+                if name == "arimaxgb" and r2 < 0.8 and predictor == "Close":
+                    raise ValueError(
+                        "ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters."
+                    )
             print(
-                "-----------------------------------------------------------------------------------------"
+                "-" * 50,
             )
-            
 
             # Store models, scalers, and transformers
             self.models[predictor] = models
@@ -858,13 +764,12 @@ class StockPredictor:
                         raw_backtest_input = last_backtest_row[close_features].values
 
                     # Option 2: May only use last row in case a huge change in price in the last horizon (The mean cannot reflect the change)
-                    # so we use the last row instead of the mean 
+                    # so we use the last row instead of the mean
                     # Want data to be a dataframe
 
                     # pred_input = prediction[close_features].iloc[-1].values
                     # backtest_input = backtest[close_features].iloc[-1].values
                     # raw_backtest_input = backtest[close_features].iloc[-1].values
-
 
                 else:
                     # For subsequent steps, if we have enough predicted values, use their average

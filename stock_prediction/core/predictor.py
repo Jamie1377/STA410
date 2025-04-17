@@ -1,8 +1,6 @@
-import random
 import numpy as np
 import yfinance as yf
 import pandas as pd
-from numpy.polynomial import polynomial
 from datetime import date, timedelta
 from sklearn.metrics import (
     root_mean_squared_error,
@@ -10,7 +8,6 @@ from sklearn.metrics import (
     r2_score,
 )
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
-from sklearn.ensemble import RandomForestRegressor, ExtraTreesRegressor
 from sklearn.linear_model import LinearRegression, Ridge
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
@@ -743,22 +740,44 @@ class StockPredictor:
                 if step == 0:
                     # Use averaged input from last 'horizon' rows for prediction
                     if len(prediction) >= horizon:
+                        # pred_input = (
+                        #     prediction[close_features]
+                        #     .iloc[-horizon:]
+                        #     .mean(axis=0)
+                        #     .values
+                        # )
+
+                        # Option 2: Use Weighted average of last 'horizon' rows
                         pred_input = (
-                            prediction[close_features]
-                            .iloc[-horizon:]
-                            .mean(axis=0)
-                            .values
+                            np.average(prediction[close_features].iloc[-horizon:], axis=0, 
+                                       weights= np.arange(1, horizon + 1) / np.sum(np.arange(1, horizon + 1))
+                                       )
                         )
+                        
                     else:
                         pred_input = last_pred_row[close_features].values
                     # for backtest
                     if len(backtest) >= horizon:
+                        # # Option 1: Use average of last 'horizon' rows
+                        # backtest_input = (
+                        #     backtest[close_features].iloc[-horizon:].mean(axis=0).values
+                        # )
+                        # raw_backtest_input = (
+                        #     backtest[close_features].iloc[-horizon:].mean(axis=0).values
+                        # )
+
+                        # Option 2: Use Weighted average of last 'horizon' rows
                         backtest_input = (
-                            backtest[close_features].iloc[-horizon:].mean(axis=0).values
+                            np.average(backtest[close_features].iloc[-horizon:], axis=0, 
+                                       weights= np.arange(1, horizon + 1) / np.sum(np.arange(1, horizon + 1))
+                                       )
                         )
                         raw_backtest_input = (
-                            backtest[close_features].iloc[-horizon:].mean(axis=0).values
+                            np.average(backtest[close_features].iloc[-horizon:], axis=0,
+                                        weights= np.arange(1, horizon + 1) / np.sum(np.arange(1, horizon + 1))
+                                        )
                         )
+
                     else:
                         backtest_input = last_backtest_row[close_features].values
                         raw_backtest_input = last_backtest_row[close_features].values
@@ -771,7 +790,7 @@ class StockPredictor:
                     # backtest_input = backtest[close_features].iloc[-1].values
                     # raw_backtest_input = backtest[close_features].iloc[-1].values
 
-                else:
+                else: #  (step > 0)
                     # For subsequent steps, if we have enough predicted values, use their average
                     if step >= horizon:
                         # Use average of last 'horizon' predictions

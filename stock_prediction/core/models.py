@@ -476,7 +476,7 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         )
         self.autoarima = False
 
-    def fit(self, X, y):
+    def fit(self, X, y, display=False):
         """
         Fit the ARIMA and XGBoost models.
 
@@ -530,13 +530,14 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
 
         # Optimize hyperparameters for GD/SGD
         _ = self.gd_model.optimize_hyperparameters(X_scaled, y)
-        print(
-            f"GD model parameters: { {k: self.gd_model.__dict__[k] for k in list(self.gd_model.__dict__.keys())[:8]} }"
-        )
         _ = self.sgd_model.optimize_hyperparameters(X_scaled, y)
-        print(
-            f"SGD model parameters: { {k: self.sgd_model.__dict__[k] for k in list(self.sgd_model.__dict__.keys())[:8]}}"
-        )
+        if display:
+            print(
+                f"GD model parameters: { {k: self.gd_model.__dict__[k] for k in list(self.gd_model.__dict__.keys())[:8]} }"
+            )
+            print(
+                f"SGD model parameters: { {k: self.sgd_model.__dict__[k] for k in list(self.sgd_model.__dict__.keys())[:8]}}"
+            )
         # Fit GD/SGD models
         self.gd_model.fit(X_scaled, y)
         self.sgd_model.fit(X_scaled, y)
@@ -548,15 +549,13 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         )
 
         # Fit residual models (Allow flexibility)
-        residuals = y - self.gd_model.predict(X_scaled)
+        residuals = y - 0.5 * (self.gd_model.predict(X_scaled) + self.sgd_model.predict(X_scaled))
         self.lgbm_model.fit(X_scaled, residuals)
         self.catboost_model.fit(X_scaled, residuals)
-        # # Create and fit GAM
-        # self.gam = LinearGAM(s(0) + s(1) + f(2))
-        # self.gam.fit(X_scaled, residuals)
-        print(
-            f"residuals mean: {np.sum(residuals)/len(residuals)}"
-        )  # residuals mean (by day) on natural scale
+        if display:
+            print(
+                f"residuals mean: {np.sum(residuals)/len(residuals)}, stock price mean {np.mean(y)}"
+            )  # residuals mean (by day) on natural scale
 
     def predict(self, X):
         """
@@ -628,7 +627,6 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
             + 0.70 * (gd_pred * 0.8 + sgd_pred * 0.2) * (1 + 0.02 * momentum_regime)
             + 0.02 * lgbm_pred
             + 0.02 * catboost_pred
-            # + 0.02 * gam_pred
         )
 
         # Final sanitization

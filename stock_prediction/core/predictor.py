@@ -440,7 +440,7 @@ class StockPredictor:
             models["ridge"].fit(X_train_scaled, y_train)
             models["polynomial"].fit(X_train_poly, y_train)
             models["arimaxgb"].fit(X_train, y_train)
-
+            result = {}
             for name, model in models.items():
 
                 if name == "linear":
@@ -463,14 +463,19 @@ class StockPredictor:
 
                 # Compute metrics
                 rmse = root_mean_squared_error(y_test, y_pred)
+                result[name] = {
+                    "rmse": rmse,
+                    "r2": r2
+                }
 
                 print(f"{predictor} - {name.capitalize()} Model:")
                 print(f"  Test Mean Squared Error: {rmse:.4f}")
                 print(f"  R² Score: {r2:.4f}")
-                if name == "arimaxgb" and r2 < 0.8 and predictor == "Close":
-                    raise ValueError(
-                        "ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters."
-                    )
+                if "arimaxgb" in result:
+                    if  predictor == "Close" and ((result["arimaxgb"]["r2"] < 0.8 ) or (result['arimaxgb']['r2'] == max([result[model]['r2'] for model in result]))):
+                        raise ValueError(
+                            "ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters."
+                        )
             print(
                 "-" * 50,
             )
@@ -1158,23 +1163,34 @@ class StockPredictor:
                     raw_backtest_array[step, pred_idx] = current_volatility
 
                 else:
-                    # Regular predictor - use model
+                    # Regular predictor - use model prediction
                     features = [col for col in predictors if col != predictor]
 
                     # Prepare input data using moving average approach
                     if step == 0:
                         # Use averaged input from last 'horizon' rows
                         if len(prediction) >= horizon:
-                            pred_input = (
-                                prediction[features].iloc[-horizon:].mean(axis=0).values
-                            )
+                            # pred_input = (
+                            #     prediction[features].iloc[-horizon:].mean(axis=0).values
+                            # )
+
+                            # Option 2: Use Weighted average of last 'horizon' rows
+                            pred_input = np.average(prediction[features].iloc[-horizon:], axis=0, 
+                                       weights= np.arange(1, horizon + 1) / np.sum(np.arange(1, horizon + 1))
+                                       )
+
+
                         else:
                             pred_input = last_pred_row[features].values
 
                         if len(backtest) >= horizon:
-                            backtest_input = (
-                                backtest[features].iloc[-horizon:].mean(axis=0).values
-                            )
+                            # backtest_input = (
+                            #     backtest[features].iloc[-horizon:].mean(axis=0).values
+                            # )
+                            # Option 2: Use Weighted average of last 'horizon' rows
+                            backtest_input = np.average(backtest[features].iloc[-horizon:], axis=0,
+                                        weights= np.arange(1, horizon + 1) / np.sum(np.arange(1, horizon + 1))
+                                        )
                         else:
                             backtest_input = last_backtest_row[features].values
                     else:

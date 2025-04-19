@@ -1,6 +1,5 @@
 from stock_prediction.utils import seed_everything
-
-seed_everything(42)  # Control the randomness
+# seed_everything(42)
 import numpy as np
 import random
 from sklearn.base import BaseEstimator, RegressorMixin
@@ -22,7 +21,6 @@ from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.holtwinters import ExponentialSmoothing, SimpleExpSmoothing
 import pmdarima as pm
 from pmdarima import auto_arima  # Computationally expensive
-from pygam import LinearGAM, s, f
 
 # Alternative of ARIMA or Time Series Models
 from statsmodels.tsa.api import VAR
@@ -66,9 +64,13 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         momentum=0.9,
         batch_size=None,
         rmsprop=False,
-        random_state=None,  # Add random_state parameter
+        random_state=42,  # Add random_state parameter
         newton=False,
+        early_stopping=False,
     ):
+        self.random_state = random_state
+        np.random.seed(self.random_state)
+        random.seed(self.random_state) 
         self.n_iter = n_iter
         self.lr = lr
         self.alpha = alpha  # L2 regularization
@@ -79,13 +81,15 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         self.newton = newton
         self.coef_ = None
         self.intercept_ = 0.0
-        self.random_state = random_state
         self.loss_history = []
+        self.loss_mape_history = []
+        self.val_loss_history = []
         self.velocity = None  # Velocity is also called decay factor
         self.sq_grad_avg = None
         self.gradients_gd = None
         self.gradients_sgd = None
         self.weights = None  # Weights for log weights
+        self.early_stopping = early_stopping
 
     def _add_bias(self, X):
         """Add bias term to input features"""
@@ -113,17 +117,19 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
             self._fit_gd(X, y)
         return self
 
-    def _fit_gd(self, X, y):
+    def _fit_gd(self, X, y, X_val=None, y_val=None):
         """Fit the model using GD
 
         Parameters:
             X (ndarray): Features
             y (ndarray): Target
         """
-        if self.random_state is not None:
-            np.random.seed(self.random_state)
-            random.seed(self.random_state)
+        seed_everything(self.random_state)  # Use instance seed
+        np.random.seed(self.random_state)
+        random.seed(self.random_state)
         X_b = self._add_bias(X)
+        if X_val is not None and y_val is not None:
+            X_val = self._add_bias(X_val)
         n_samples, n_features = X_b.shape
         self.coef_ = np.zeros(n_features)
 
@@ -170,20 +176,51 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
                 + self.l1_ratio * np.sign(self.coef_)
             )
 
+            # Track validation loss
+            if X_val is not None and y_val is not None:
+                val_pred =  X_val @ self.coef_
+                val_loss = np.mean((val_pred - y_val) ** 2) + 0.5 * self.alpha * np.sum(
+                    self.coef_**2 + self.l1_ratio * np.sum(np.abs(self.coef_))
+                )
+                self.val_loss_history.append(val_loss)
+
             # Store loss
             loss = np.mean((X_b @ self.coef_ - y) ** 2) + 0.5 * self.alpha * np.sum(
-                self.coef_**2
+                self.coef_**2 + self.l1_ratio * np.sum(np.abs(self.coef_))    ### regularization form loss function MSE but stock price is different so MAPE maybe better
             )
             self.loss_history.append(loss)
+
+            # Early stopping condition
+            loss_mape = np.mean(
+                np.abs((X_b @ self.coef_ - y) / y)
+            )   
+            self.loss_mape_history.append(loss_mape)
+
+            if self.early_stopping and len(self.loss_history) > 2:
+                if X_val is not None and y_val is not None:
+                    if val_loss < 0.7:
+                        
+                        print(  
+                            f"Early stopping at iteration {_} with validation loss: {val_loss:.4f}"
+                        )
+                        break
+                else:
+                    if loss_mape < 0.01:
+                        print(
+                                f"Early stopping at iteration {_} with training loss (MAPE): {loss_mape:.4f}"
+                            )
+                        break
+                        
+                
 
         self.intercept_ = self.coef_[0]
         self.coef_ = self.coef_[1:]
 
     def _fit_sgd(self, X, y):
         """Fit the model using SGD"""
-        if self.random_state is not None:
-            np.random.seed(self.random_state)
-            random.seed(self.random_state)
+        seed_everything(self.random_state)  # Use instance seed
+        np.random.seed(self.random_state)
+        random.seed(self.random_state)
         X_b = self._add_bias(X)
         n_samples, n_features = X_b.shape
         self.coef_ = np.zeros(n_features)
@@ -362,12 +399,19 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
                 actual_changes[:min_len] == pred_changes[:min_len]
             )  # classfication accuracy
 
+            # First prediction deviation
+
+            first_prediction_deviation = np.abs((preds[0] - y_val[0]) / y_val[0])
+            mean_pred_deviations = sum([np.abs((preds[i] - y_val[i]) / y_val[i]) for i in range(1, len(preds))]) // (len(preds)-1)
+
             # Combined loss (prioritize both accuracy and error)
             return (
-                0.7 * rmse + 0.3 * mape - 0.2 * dir_acc - 0.1 * volatility
+                0.7 * rmse + 0.3 * mape - 0.2 * dir_acc - 0.1 * volatility + 30 * first_prediction_deviation + 20 * mean_pred_deviations
             )  
         # Rationale: if accuracy is high, the loss is low, and vice versa. In other words, if the model's directions are not accurate, the loss is high so it is penalized
         #  Volatility is encouraged to be high so that the model can be more flexible and adaptive to the market changes. The model is penalized if it is too conservative and not adaptive to the market changes.
+        # First prediction deviation is encouraged to be low so that the model can be more accurate in the first prediction. The model is penalized if it is too conservative and not adaptive to the market changes.
+ 
 
         # Optimization setup
         initial_guess = [
@@ -440,9 +484,8 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
     """
 
     def __init__(self, xgb_params=None):
-        # np.random.seed(42)
-        # random.seed(42)
         """Initialize the ARIMA + XGBoost model"""
+        seed_everything(42)
         self.arima_model = None
         self.linear_model = LinearRegression()
         self.xgb_model = XGBRegressor(random_state=42, is_provide_training_metric=True)
@@ -454,17 +497,19 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
             momentum=0.9,
             rmsprop=False,
             random_state=42,
+            early_stopping=True,
         )
         self.sgd_model = GradientDescentRegressor(
             n_iter=1200, lr=0.01, batch_size=32, rmsprop=True, random_state=42
         )  # To ensure reproducibility
         self.lgbm_model = LGBMRegressor(
+            random_state=42,
             n_jobs=-1,
             verbosity=-1,
             scale_pos_weight=2,
             loss_function="Logloss",
-            random_state=42,
             is_provide_training_metric=True,
+        
         )
         self.catboost_model = CatBoostRegressor(
             iterations=100,

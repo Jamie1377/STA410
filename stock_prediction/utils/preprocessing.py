@@ -7,15 +7,26 @@ from sklearn import utils
 import numpy as np
 import os
 import random
-def seed_everything(seed):
-    random.seed(seed)
-    os.environ['PYTHONHASHSEED'] = str(seed)
+# def seed_everything(seed):
+#     random.seed(seed)
+#     os.environ['PYTHONHASHSEED'] = str(seed)
+#     np.random.seed(seed)
+#     utils.check_random_state(seed)
+#     # torch.manual_seed(seed)
+#     # torch.cuda.manual_seed(seed)
+#     # torch.backends.cudnn.deterministic = True
+#     # torch.backends.cudnn.benchmark = True
+
+
+# In utils.py or equivalent:
+def seed_everything(seed=42):
     np.random.seed(seed)
-    utils.check_random_state(seed)
-    # torch.manual_seed(seed)
-    # torch.cuda.manual_seed(seed)
-    # torch.backends.cudnn.deterministic = True
-    # torch.backends.cudnn.benchmark = True
+    random.seed(seed)
+    os.environ["PYTHONHASHSEED"] = str(seed)
+    # Add TensorFlow/PyTorch seeds if used
+
+
+
 
 
 def find_d(series):

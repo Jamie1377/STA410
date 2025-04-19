@@ -1,3 +1,5 @@
+from stock_prediction.utils import seed_everything
+seed_everything(42)
 import numpy as np
 import yfinance as yf
 import pandas as pd
@@ -345,13 +347,13 @@ class StockPredictor:
         ].fillna(0.0)
 
         ### 13. Market Regime Detection by HMM
-        hmm = GaussianHMM(n_components=5, covariance_type="diag", n_iter=100)
+        hmm = GaussianHMM(n_components=5, covariance_type="diag", n_iter=100, random_state=42)
         hmm.fit(self.data["Close"].pct_change().dropna().values.reshape(-1, 1))
         # Predict hidden states
         market_state = hmm.predict(
             self.data["Close"].pct_change().dropna().values.reshape(-1, 1)
         )
-        hmm_sp = GaussianHMM(n_components=5, covariance_type="diag", n_iter=100)
+        hmm_sp = GaussianHMM(n_components=5, covariance_type="diag", n_iter=100, random_state=42)
         hmm_sp.fit(self.data["SP500"].pct_change().dropna().values.reshape(-1, 1))
         market_state_sp500 = hmm_sp.predict(
             self.data["SP500"].pct_change().dropna().values.reshape(-1, 1)
@@ -398,7 +400,6 @@ class StockPredictor:
         refit : bool
             Whether to refit models on full data
         """
-        # np.random.seed(42)
         self.models = {}
         self.scalers = {}
         self.transformers = {}
@@ -422,23 +423,23 @@ class StockPredictor:
             X_train_scaled = scaler.fit_transform(X_train)
             X_test_scaled = scaler.transform(X_test)
 
-            # Polynomial features
-            poly = PolynomialFeatures(degree=2)
-            X_train_poly = poly.fit_transform(X_train_scaled)
-            X_test_poly = poly.transform(X_test_scaled)
+            # # Polynomial features
+            # poly = PolynomialFeatures(degree=2)
+            # X_train_poly = poly.fit_transform(X_train_scaled)
+            # X_test_poly = poly.transform(X_test_scaled)
 
             # Train models
             models = {
                 "linear": LinearRegression(),
-                "ridge": Ridge(alpha=1.0),
-                "polynomial": LinearRegression(),
+                # "ridge": Ridge(alpha=1.0),
+                # "polynomial": LinearRegression(),
                 "arimaxgb": ARIMAXGBoost(),
             }
 
             # Fit models
             models["linear"].fit(X_train, y_train)
-            models["ridge"].fit(X_train_scaled, y_train)
-            models["polynomial"].fit(X_train_poly, y_train)
+            # models["ridge"].fit(X_train_scaled, y_train)
+            # models["polynomial"].fit(X_train_poly, y_train)
             models["arimaxgb"].fit(X_train, y_train)
             result = {}
             for name, model in models.items():
@@ -446,12 +447,12 @@ class StockPredictor:
                 if name == "linear":
                     y_pred = model.predict(X_test)
                     # 1 - (1 - model.score(X_test, y_test))
-                elif name == "ridge":
-                    y_pred = model.predict(scaler.transform(X_test))
-                    # 1 - (1 - model.score(X_test_scaled, y_test))
-                elif name == "polynomial":
-                    y_pred = model.predict(poly.transform(scaler.transform(X_test)))
-                    # 1 - (1 - model.score(X_test_poly, y_test))
+                # elif name == "ridge":
+                #     y_pred = model.predict(scaler.transform(X_test))
+                #     # 1 - (1 - model.score(X_test_scaled, y_test))
+                # elif name == "polynomial":
+                #     y_pred = model.predict(poly.transform(scaler.transform(X_test)))
+                #     # 1 - (1 - model.score(X_test_poly, y_test))
                 elif name == "arimaxgb":
                     y_pred = model.predict(X_test)
 
@@ -472,7 +473,7 @@ class StockPredictor:
                 print(f"  Test Mean Squared Error: {rmse:.4f}")
                 print(f"  R² Score: {r2:.4f}")
                 if "arimaxgb" in result:
-                    if  predictor == "Close" and ((result["arimaxgb"]["r2"] < 0.8 ) or (result['arimaxgb']['r2'] == max([result[model]['r2'] for model in result]))):
+                    if  predictor == "Close" and ((result["arimaxgb"]["r2"] < 0.8 ) or (result['arimaxgb']['r2'] != max([result[model]['r2'] for model in result]))):
                         raise ValueError(
                             "ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters."
                         )
@@ -483,19 +484,19 @@ class StockPredictor:
             # Store models, scalers, and transformers
             self.models[predictor] = models
             self.scalers[predictor] = scaler
-            self.transformers[predictor] = poly
+            # self.transformers[predictor] = poly
 
             if refit is True:
                 # Refit models on full data
                 refit_models = {
                     "linear": LinearRegression(),
-                    "ridge": Ridge(alpha=1.0),
-                    "polynomial": LinearRegression(),  # Ridge(alpha=1.0),
+                    # "ridge": Ridge(alpha=1.0),
+                    # "polynomial": LinearRegression(),  # Ridge(alpha=1.0),
                     "arimaxgb": ARIMAXGBoost(),
                 }
                 refit_models["linear"].fit(X, y)
-                refit_models["ridge"].fit(scaler.transform(X), y)
-                refit_models["polynomial"].fit(poly.transform(scaler.transform(X)), y)
+                # refit_models["ridge"].fit(scaler.transform(X), y)
+                # refit_models["polynomial"].fit(poly.transform(scaler.transform(X)), y)
                 refit_models["arimaxgb"].fit(X, y)
                 self.models[predictor] = refit_models
 
@@ -517,7 +518,6 @@ class StockPredictor:
         Tuple[pd.DataFrame, pd.DataFrame]
             Forecasted data and backtest data
         """
-        # np.random.seed(42)
         # Ensure models are prepared
         if not self.models:
             raise ValueError("Please run prepare_models() first")

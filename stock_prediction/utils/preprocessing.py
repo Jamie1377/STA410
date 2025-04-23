@@ -38,7 +38,7 @@ def find_d(series):
     return d
 
 
-def get_next_valid_date(current_date):
+def get_next_valid_date(current_date) -> pd.Timestamp:
     """
     Returns the next valid trading day using NYSE calendar.
     """
@@ -60,6 +60,7 @@ def get_next_valid_date(current_date):
     if next_day == pd.Timestamp("2025-01-09 00:00:00"):
         next_day += pd.Timedelta(days=1)
     return next_day
+
 
 def get_mae(max_leaf_nodes, X1_train, X1_validation, Y1_train, Y1_validation):
     model = DecisionTreeRegressor(max_leaf_nodes=max_leaf_nodes, random_state=0)

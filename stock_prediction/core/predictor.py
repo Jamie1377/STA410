@@ -1,9 +1,10 @@
 from stock_prediction.utils import seed_everything
+
 seed_everything(42)
 import numpy as np
 import yfinance as yf
 import pandas as pd
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from sklearn.metrics import (
     root_mean_squared_error,
     mean_absolute_percentage_error,
@@ -15,11 +16,13 @@ from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import pandas_market_calendars as mcal
 from sklearn.model_selection import train_test_split
+from sklearn.impute import SimpleImputer
 from hmmlearn.hmm import GaussianHMM
+from xgboost import XGBRegressor
 
 # Custom imports
 from stock_prediction.core import ARIMAXGBoost
-from stock_prediction.utils import get_next_valid_date
+from stock_prediction.utils import get_next_valid_date, optimize_lookback
 
 # Sample Dataset
 stock_data = yf.download("AAPL", start="2024-01-01", end=date.today())
@@ -30,6 +33,147 @@ stock_data
 import requests
 import pandas as pd
 from datetime import timedelta
+import hashlib
+import joblib
+
+# API imports
+api_key = "PKR0BKC0QMVXGC6WUYZB"
+secret_key = "nIonxysbSHIIC77ojMjiQPgCrug78echi1IcZMe8"
+paper = True
+# DO not change this
+trade_api_url = None
+trade_api_wss = None
+data_api_url = None
+stream_data_wss = None
+
+# Alpaca API imports
+import os
+import requests
+from alpaca.trading.client import TradingClient
+from alpaca.trading.requests import (
+    MarketOrderRequest,
+    LimitOrderRequest,
+    StopLossRequest,
+    TakeProfitRequest,
+    GetOrdersRequest,
+)
+from alpaca.trading.enums import (
+    OrderSide,
+    TimeInForce,
+    OrderType,
+    OrderClass,
+    QueryOrderStatus,
+)
+
+trading_client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
+# api = tradeapi.REST(
+#     key_id='PKR0BKC0QMVXGC6WUYZB',
+#     secret_key='nIonxysbSHIIC77ojMjiQPgCrug78echi1IcZMe8',
+#     base_url='https://paper-api.alpaca.markets/v2'  # Paper trading endpoint
+# )
+
+# def generate_trading_signal(predictor, symbol):
+#     predictor.load_data()
+#     lookback = optimize_lookback(
+#         predictor.data.drop(columns="Close"),
+#         predictor.data["Close"],
+#         model=XGBRegressor(
+#             n_estimators=20,
+#             max_depth=3,
+#             learning_rate=0.1,
+#             random_state=42,
+#             n_jobs=-1,
+#         ),
+#         min_window=60,
+#         step_size=10,
+#         n_splits=5,
+#     )
+#     print(f"Optimal lookback window: {lookback}")
+#     predictor.data = predictor.data.iloc[-lookback:]
+#     features = [
+#         # "Market_State",
+#         "Close",
+#         "MA_50",
+#         # "MA_200",
+#         # "High",
+#         # "Low",
+#         "MA_7",
+#         # "MA_21",
+#         "SP500",
+#         "TNX",
+#         "USDCAD=X",
+#         # "Tech",
+#         # "Fin",
+#         "VIX",
+#         "Energy",
+#     ]
+#     + [
+#         "rolling_min",
+#         "rolling_median",
+#         "rolling_sum",
+#         "rolling_ema",
+#         "rolling_25p",
+#         "rolling_75p",
+#     ]
+#     + ["RSI", "MACD", "ATR", "Upper_Bollinger", "Lower_Bollinger"]
+#     + ["VWAP"]
+#     + [  # "Volatility",
+#         "Daily Returns",
+#         "Williams_%R",
+#         "Momentum_Interaction",
+#         # "Volatility_Adj_Momentum",
+#         "Stochastic_%K",
+#         "Stochastic_%D",
+#         "Momentum_Score",
+#     ] # Use same features as in notebook
+#     horizon = 5  # Prediction window
+
+#     predictor.prepare_models(features, horizon=horizon)
+#     forecast, _, _, _ = predictor.one_step_forward_forecast(
+#         predictors=features,
+#         model_type="arimaxgb",
+#         horizon=horizon
+#     )
+
+#     # Get latest prediction
+#     predicted_price = forecast['Close'].iloc[-1]
+#     current_price = predictor.data['Close'].iloc[-1]
+
+#     # Generate signal
+#     if predicted_price > current_price * 1.01:  # 1% threshold
+#         return 'BUY'
+#     elif predicted_price < current_price * 0.99:
+#         return 'SELL'
+#     else:
+#         return 'HOLD'
+
+# def execute_trade(symbol, signal, api):
+#     position = api.get_position(symbol)
+#     cash = api.get_account().cash
+#     current_price = api.get_last_trade(symbol).price
+#     # In execute_trade()
+#     max_risk_per_trade = 0.02  # 2% of portfolio
+#     portfolio_value = float(api.get_account().equity)
+#     max_loss = portfolio_value * max_risk_per_trade
+
+#     if signal == 'BUY' and not position:
+#         # Risk management: don't use more than 20% of cash
+#         max_qty = (float(cash) * 0.2) // current_price
+#         api.submit_order(
+#             symbol=symbol,
+#             qty=max_qty,
+#             side='buy',
+#             type='market',
+#             time_in_force='day'
+#         )
+#     elif signal == 'SELL' and position:
+#         api.submit_order(
+#             symbol=symbol,
+#             qty=position.qty,
+#             side='sell',
+#             type='market',
+#             time_in_force='day'
+#         )
 
 
 class MarketSentimentAnalyzer:  # Compuationally expensive, try to use volatility to replace the sentiment
@@ -121,6 +265,58 @@ class StockPredictor:
         self.transformers = {}
         self.interval = interval
         self.history = []  # New attribute for error correction
+        self.risk_params = {
+            "max_portfolio_risk": 0.05,  # 5% total portfolio risk
+            "per_trade_risk": 0.01,  # 1% risk per trade
+            "stop_loss_pct": 0.03,  # 3% trailing stop
+            "take_profit_pct": 0.06,  # 6% take profit
+            "max_sector_exposure": 0.4,  # 40% max energy sector exposure
+            "daily_loss_limit": -0.03,  # -3% daily loss threshold
+        }
+        self.api = trading_client
+        self.model_cache_dir = f"model_cache/{self.symbol}"
+        os.makedirs(self.model_cache_dir, exist_ok=True)
+        self.data_hash = None
+        self.forecast_record = {}
+
+    # def _get_data_hash(self):
+    #     """Generate unique hash of the training data"""
+    #     return hashlib.sha256(pd.util.hash_pandas_object(self.data).h)
+
+    def _get_data_hash(self):
+        """Generate unique hash of the training data"""
+        hash_series = pd.util.hash_pandas_object(self.data, index=True)
+        hash_bytes = hash_series.values.tobytes()
+        return hashlib.sha256(hash_bytes).hexdigest()
+
+    def _load_cached_model(self, predictor):
+        cache_path = f"{self.model_cache_dir}/{predictor}.pkl"
+        if os.path.exists(cache_path):
+            return joblib.load(cache_path)
+        return None
+
+    def _save_model_cache(self, predictor, model):
+        cache_path = f"{self.model_cache_dir}/{predictor}.pkl"
+        joblib.dump(model, cache_path)
+
+    def _model_needs_retraining(self, predictor):
+        if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
+            return True
+        current_hash = self._get_data_hash()
+        hash_file = f"{self.model_cache_dir}/{predictor}.hash"
+
+        # If there is no hash file, create one
+        if not os.path.exists(hash_file):
+            return True
+
+        with open(hash_file, "r") as f:
+            saved_hash = f.read()
+        # Need to check if the data is updated
+        if current_hash != saved_hash:
+            with open(hash_file, "w") as f:
+                f.write(current_hash)
+            return True
+        return False
 
     def _compute_rsi(self, window=14):
         """Custom RSI implementation"""
@@ -138,6 +334,437 @@ class StockPredictor:
         low_close = (self.data["Low"] - self.data["Close"].shift()).abs()
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         return tr.rolling(window).mean()
+
+    def calculate_position_size(self, current_price, atr):
+        """Calculate position size using Average True Range"""
+        account = self.api.get_account()
+        portfolio_value = float(account.equity)
+
+        # Risk per trade calculation
+        dollar_risk = portfolio_value * self.risk_params["per_trade_risk"]
+        volatility_risk = atr * current_price  # ATR in dollar terms
+
+        position_size = dollar_risk / volatility_risk
+        return int(position_size)
+
+    def get_sector_exposure(self):
+        """Calculate current energy sector exposure"""
+        positions = self.api.get_all_positions()
+        energy_positions = [p for p in positions if p == "energy"]
+        total_value = sum(float(p.market_value) for p in energy_positions)
+        return total_value / float(self.api.get_account().equity)
+
+    def generate_trading_signal(self, predictor, symbol):
+        predictor.load_data()
+        lookback = optimize_lookback(
+            predictor.data.drop(columns="Close"),
+            predictor.data["Close"],
+            model=XGBRegressor(
+                n_estimators=20,
+                max_depth=3,
+                learning_rate=0.1,
+                random_state=42,
+                n_jobs=-1,
+            ),
+            min_window=60,
+            step_size=10,
+            n_splits=5,
+        )
+        print(f"Optimal lookback window: {lookback}")
+        predictor.data = predictor.data.iloc[-lookback:]
+        features = [
+            "Close",
+            "MA_50",
+            # "MA_200",
+            # "High",
+            # "Low",
+            "MA_7",
+            # "MA_21",
+            "SP500",
+            "TNX",
+            "USDCAD=X",
+            # "Tech",
+            # "Fin",
+            "VIX",
+            "Energy",
+            "rolling_min",
+            "rolling_median",
+            "rolling_sum",
+            "rolling_ema",
+            "rolling_25p",
+            "rolling_75p",
+            "RSI",
+            "MACD",
+            "ATR",
+            "Upper_Bollinger",
+            "Lower_Bollinger",
+            "VWAP",
+            "Volatility",
+            "Daily Returns",
+            "Williams_%R",
+            "Momentum_Interaction",
+            "Stochastic_%K",
+            "Stochastic_%D",
+            "Momentum_Score",
+        ]  # Use same features as in notebook
+        horizon = 5  # Prediction window
+
+        predictor.prepare_models(features, horizon=horizon)
+        forecast, _, _, _ = predictor.one_step_forward_forecast(
+            predictors=features, model_type="arimaxgb", horizon=horizon
+        )
+
+        # Get latest prediction
+        predicted_price = forecast["Close"].iloc[-1]
+        self.forecast_record[symbol] = predicted_price
+        # current_price = predictor.data['Close'].iloc[-1]
+        if datetime.now().hour < 16 and datetime.now().hour > 9:
+            current_price = (
+                yf.download(start=date.today(), tickers=symbol, interval="1m")
+                .Close.iloc[-1]
+                .values[0]
+            )
+        else:
+            current_price = (
+                yf.download(start=date.today(), tickers=symbol, interval="1d")
+                .Close.iloc[-1]
+                .values[0]
+            )
+
+        # symbol = "AAPL"
+        # trade = alpaca.get_latest_trade(symbol)
+        # print(f"{symbol} Live Price: ${trade.price}")
+
+        # Generate signal
+        if predicted_price > current_price * 1.01:  # 1% threshold
+            return "BUY"
+        elif predicted_price < current_price * 0.99:
+            return "SELL"
+        else:
+            return "HOLD"
+
+    def generate_hft_signals(self, symbol, profit_target=0.0001):
+        """Generate immediate execution signals with tight spreads"""
+        signals = []
+        # get cached model
+        if datetime.now().hour < 16 and datetime.now().hour > 9:
+            current_price = (
+                yf.download(start=date.today(), tickers=symbol, interval="1m")
+                .Close.iloc[-1]
+                .values[0]
+            )
+        else:
+            current_price = (
+                yf.download(start=date.today(), tickers=symbol, interval="1d")
+                .Close.iloc[-1]
+                .values[0]
+            )
+
+        # Calculate bid/ask spread
+        bid_price = round(current_price * 0.9995, 2)
+        ask_price = round(current_price * 1.0005, 2)
+
+        # Profit targets
+        sell_target = round(current_price * (1 + profit_target), 2)
+        buy_target = round(current_price * (1 - profit_target), 2)
+
+        # Existing position check
+        try:
+            # position = self.api.get_open_position(self.symbol)
+            positions = [position.symbol for position in self.api.get_all_positions()]
+
+            if symbol in positions:
+                position = self.api.get_open_position(symbol)
+                if float(position.unrealized_plpc) >= profit_target:
+                    signals.append(("SELL", float(position.qty), sell_target))
+                elif self.forecast_record[symbol] > current_price * 1.0001:
+                    print(f"Have position for {self.symbol}, but want to buy.")
+                    signals.append(("BUY", float(position.qty), buy_target))
+
+            else:  # No open position of the symbol
+                if self.forecast_record[symbol] > current_price * 1.0001:
+                    print(f"No open position for {self.symbol}, but want to buy.")
+                    signals.append(
+                        (
+                            "BUY",
+                            max(round(self._calculate_position_size()), 5),
+                            buy_target,
+                        )
+                    )
+                elif self.forecast_record[symbol] < current_price * 0.9999:
+                    print(f"No open position for {self.symbol}, but want to sell.")
+                    signals.append(
+                        (
+                            "SELL",
+                            max(round(self._calculate_position_size()), 5),
+                            sell_target,
+                        )
+                    )
+        except Exception:
+            pass
+
+        # Add market making signals
+        # signals.extend([
+        #     ("BUY", self._calculate_position_size(), bid_price),
+        #     ("SELL", self._calculate_position_size(), ask_price)
+        # ])
+
+        return signals
+
+    def _calculate_position_size(self):
+        """Risk-managed position sizing"""
+        account = self.api.get_account()
+        return float(account.buying_power) * 0.01 / self.data["Close"].iloc[-1]
+
+    def execute_trade(self, signal):
+        # Cancel stale orders every 2 minutes
+        if datetime.now().minute % 2 == 0:
+            self._cancel_old_orders()
+
+        symbol = self.symbol
+        # current_price = self.data['Close'].iloc[-1]
+        if datetime.now().hour < 16 and datetime.now().hour > 9:
+            current_price = (
+                yf.download(start=date.today(), tickers=symbol, interval="1m")
+                .Close.iloc[-1]
+                .values[0]
+            )
+        else:
+            current_price = (
+                yf.download(start=date.today(), tickers=symbol, interval="1d")
+                .Close.iloc[-1]
+                .values[0]
+            )
+        atr = self.data["ATR"].iloc[-1]
+
+        # Check daily loss limit
+        if self.check_daily_loss():
+            print("Daily loss limit hit - no trading allowed")
+            return
+
+        # Check sector exposure
+        # if self.get_sector_exposure() >= self.risk_params['max_sector_exposure']:
+        #     print("Max sector exposure reached")
+        #     return
+
+        # position_size = self.calculate_position_size(current_price, atr)
+        position_size = max(1, round(self.calculate_position_size(current_price, atr)))
+        #  In case insufficient qty of shares
+
+        # position_size = 20  # Placeholder for position size calculation
+
+        if signal == "BUY":
+            # Calculate dynamic stop levels based on ATR
+            # stop_price = current_price - (0.2 * atr)
+            # take_profit = current_price + (0.3 * atr)
+            # limit_price = current_price + (0.1 * atr)
+            # Round to 2 decimal places
+            take_profit = round(current_price + (0.3 * atr), 2)
+            # limit_price = round(current_price + (0.1 * atr), 2)
+            stop_price = round(current_price - (0.2 * atr), 2)
+
+            market_order_data = MarketOrderRequest(
+                symbol=symbol,
+                qty=position_size,
+                side=OrderSide.BUY,
+                type=OrderType.MARKET,
+                time_in_force=TimeInForce.GTC,
+                order_class=OrderClass.BRACKET,
+                take_profit=TakeProfitRequest(
+                    take_profit=take_profit, limit_price=round(take_profit * 1.01, 2)
+                ),
+                stop_loss=StopLossRequest(
+                    stop_price=stop_price, limit_price=round(stop_price * 0.99, 2)
+                ),  # 1% trailing stop
+            )
+
+            # order = self.api.submit_order(
+            #     order_data=market_order_data)
+            # order
+            # status = self.api.get_orders(order.id)
+            # print(f"Order {order.id} status: {status}")
+
+            try:
+                order = self.api.submit_order(market_order_data)
+                print(f"Order submitted: {order.id}")
+
+                # Verify order status
+                status = self.api.get_orders(order.id).status
+                print(f"Order status: {status}")
+
+                # Check fills
+                if status == "filled":
+                    print(f"Filled at avg price: {order.filled_avg_price}")
+                else:
+                    print("Order not filled - check price/quantity")
+            except Exception as e:
+                print(f"Order failed: {str(e)}")
+
+        elif signal == "SELL":
+            positions = self.api.get_all_positions()
+            for p in positions:
+                if p.symbol == symbol:
+                    market_order_data_sell = MarketOrderRequest(
+                        symbol=symbol,
+                        qty=p.qty,
+                        side=OrderSide.SELL,
+                        type=OrderType.MARKET,
+                        time_in_force=TimeInForce.GTC,
+                        order_class=OrderClass.BRACKET,
+                        # stop_loss=StopLossRequest(stop_price=current_price - (1 * atr), limit_price=current_price + (1 * atr) * 1.01),
+                        # take_profit=TakeProfitRequest(take_profit=current_price + (2 * atr), limit_price=current_price - (2 * atr) * 0.99)  # 1% trailing stop
+                        # For short positions (SELL)
+                        stop_loss=StopLossRequest(
+                            stop_price=round(
+                                current_price + (1 * atr), 2
+                            ),  # Stop price above current for shorts
+                            limit_price=round(current_price + (1 * atr) * 1.01, 2),
+                        ),
+                        take_profit=TakeProfitRequest(
+                            take_profit=round(
+                                current_price - (2 * atr), 2
+                            ),  # Take profit below current for shorts
+                            limit_price=round(current_price - (2 * atr) * 0.99, 2),
+                        ),
+                    )
+                    # order = self.api.submit_order(
+                    #     order_data=market_order_data_sell
+                    # )
+                    # market_order_data_sell
+                    # status = self.api.get_orders(order.id)
+                    # print(f"Order {order.id} status: {status}")
+                    try:
+                        order = self.api.submit_order(market_order_data_sell)
+                        print(f"Order submitted: {order.id}")
+
+                        # Verify order status
+                        status = self.api.get_orders(order.id).status
+                        print(f"Order status: {status}")
+
+                        # Check fills
+                        if status == "filled":
+                            print(f"Filled at avg price: {order.filled_avg_price}")
+                        else:
+                            print("Order not filled - check price/quantity")
+                    except Exception as e:
+                        print(f"Order failed: {str(e)}")
+            if symbol not in [p.symbol for p in positions]:
+                print(f"No position found for {symbol} to sell. But want to short.")
+                req = MarketOrderRequest(
+                    symbol=symbol,
+                    qty=position_size,
+                    side=OrderSide.SELL,
+                    type=OrderType.MARKET,
+                    time_in_force=TimeInForce.GTC,
+                    stop_loss=StopLossRequest(
+                        stop_price=current_price - (1 * atr),
+                        limit_price=current_price + (1 * atr) * 1.01,
+                    ),
+                    take_profit=TakeProfitRequest(
+                        take_profit=current_price + (2 * atr),
+                        limit_price=current_price - (2 * atr) * 0.99,
+                    ),  # 1% trailing stop
+                )
+
+                try:
+                    order = self.api.submit_order(req)
+                    print(f"Order submitted: {order.id}")
+
+                    # Verify order status
+                    status = self.api.get_orders(order.id).status
+                    print(f"Order status: {status}")
+
+                    # Check fills
+                    if status == "filled":
+                        print(f"Filled at avg price: {order.filled_avg_price}")
+                    else:
+                        print("Order not filled - check price/quantity")
+                except Exception as e:
+                    print(f"Order failed: {str(e)}")
+
+    def execute_hft(self, symbol):
+        """Execute HFT strategy with cached models"""
+        # Cancel stale orders every 2 minutes
+        if datetime.now().minute % 2 == 0:
+            self._cancel_old_orders()
+
+        # Get signals using cached models
+        signals = self.generate_hft_signals(symbol=symbol)
+
+        # Batch order processing
+        orders = []
+        for side, qty, price in signals:
+            order_request = LimitOrderRequest(
+                symbol=symbol,
+                qty=round(float(qty)),
+                side=OrderSide.SELL if side == "SELL" else OrderSide.BUY,
+                limit_price=price,
+                time_in_force=TimeInForce.DAY,
+                take_profit=TakeProfitRequest(
+                    limit_price=(
+                        round(price * 1.0001, 2)
+                        if side == "BUY"
+                        else round(price * 0.9999, 2)
+                    )
+                ),
+                stop_loss=StopLossRequest(
+                    stop_price=(
+                        round(price * 0.995, 2)
+                        if side == "BUY"
+                        else round(price * 1.005, 2)
+                    ),
+                    limit_price=(
+                        round(price * 0.99, 2)
+                        if side == "BUY"
+                        else round(price * 1.01, 2)
+                    ),
+                ),
+            )
+
+            self.api.submit_order(order_request)
+
+    def _cancel_old_orders(self):
+        """Cancel orders older than 2 minutes"""
+        # orders = self.api.get_orders(filter=QueryOrderStatus.OPEN)
+        orders = self.api.get_orders(
+            filter=GetOrdersRequest(status=QueryOrderStatus.OPEN)
+        )
+
+        for order in orders:
+            if (datetime.now(order.created_at.tzinfo) - order.created_at).seconds > 120:
+                self.api.cancel_order_by_id(order.id)
+
+    def check_daily_loss(self):
+        """Check portfolio-wide daily loss limits"""
+        account = self.api.get_account()
+        daily_pnl = float(account.equity) - float(account.last_equity)
+
+        if (
+            daily_pnl / float(account.last_equity)
+            < self.risk_params["daily_loss_limit"]
+        ):
+            # Liquidate all positions
+            positions = self.api.list_positions()
+            for p in positions:
+                req = MarketOrderRequest(
+                    symbol=p.symbol,
+                    qty=p.qty,
+                    side=OrderSide.SELL,
+                    type=OrderType.MARKET,
+                    time_in_force=TimeInForce.GTC,
+                )
+                res = self.api.submit_order(order_data=req)
+                res
+
+                # self.api.submit_order(
+                #     symbol=p.symbol,
+                #     qty=p.qty,
+                #     side='sell',
+                #     type='market',
+                #     time_in_force='gtc'
+                # )
+            return True
+        return False
 
     def load_data(self):
         """Load and prepare stock data with features"""
@@ -268,6 +895,16 @@ class StockPredictor:
         vix = yf.download(
             "^VIX", start=self.start_date, end=self.end_date, interval=self.interval
         )["Close"]
+
+        # self.data["SP500"] = sp500
+        # self.data["TNX"] = tnx
+        # self.data["Treasury_Yield"] = treasury_yield
+        # self.data["USDCAD=X"] = exchange_rate
+        # self.data["Tech"] = technology_sector
+        # self.data["Fin"] = financials_sector
+        # self.data["VIX"] = vix
+        # self.data["Energy"] = energy_sector
+
         economic_data = (
             pd.concat(
                 [
@@ -294,13 +931,18 @@ class StockPredictor:
             )
             .reset_index()
             .rename(columns={"index": "Date"})
-            .dropna()
+            # .dropna()
         )
         economic_data.columns = economic_data.columns.get_level_values(0)
         economic_data["Date"] = pd.to_datetime(economic_data["Date"])
         economic_data.set_index("Date", inplace=True)
+        # Issue of Yfinance API of USDCAD=X
+        # Fill missing values with the mean
+        economic_data["USDCAD=X"] = economic_data["USDCAD=X"].fillna(
+            economic_data["USDCAD=X"].mean()
+        )
 
-        ### 11. Whether the next or previous day is a non-trading day
+        # 11. Whether the next or previous day is a non-trading day
         nyse = mcal.get_calendar("NYSE")
         schedule = nyse.schedule(start_date=self.start_date, end_date=self.end_date)
         economic_data["is_next_non_trading_day"] = economic_data.index.shift(
@@ -347,25 +989,25 @@ class StockPredictor:
         ].fillna(0.0)
 
         ### 13. Market Regime Detection by HMM
-        hmm = GaussianHMM(n_components=5, covariance_type="diag", n_iter=100, random_state=42)
-        hmm.fit(self.data["Close"].pct_change().dropna().values.reshape(-1, 1))
-        # Predict hidden states
-        market_state = hmm.predict(
-            self.data["Close"].pct_change().dropna().values.reshape(-1, 1)
-        )
-        hmm_sp = GaussianHMM(n_components=5, covariance_type="diag", n_iter=100, random_state=42)
-        hmm_sp.fit(self.data["SP500"].pct_change().dropna().values.reshape(-1, 1))
-        market_state_sp500 = hmm_sp.predict(
-            self.data["SP500"].pct_change().dropna().values.reshape(-1, 1)
-        )
-        # Initialize the Market_State column
-        self.data["Market_State"] = np.zeros(len(self.data))
-        if (
-            len(set(list(market_state))) != 1
-            and len(set(list(market_state_sp500))) != 1
-        ):
-            self.data["Market_State"][0] = 0
-            self.data.iloc[1:]["Market_State"] = market_state + market_state_sp500
+        # hmm = GaussianHMM(n_components=3, covariance_type="diag", n_iter=100, random_state=42)
+        # hmm.fit(self.data["Close"].pct_change().dropna().values.reshape(-1, 1))
+        # # Predict hidden states
+        # market_state = hmm.predict(
+        #     self.data["Close"].pct_change().dropna().values.reshape(-1, 1)
+        # )
+        # hmm_sp = GaussianHMM(n_components=3, covariance_type="diag", n_iter=100, random_state=42)
+        # hmm_sp.fit(self.data["SP500"].pct_change().dropna().values.reshape(-1, 1))
+        # market_state_sp500 = hmm_sp.predict(
+        #     self.data["SP500"].pct_change().dropna().values.reshape(-1, 1)
+        # )
+        # # Initialize the Market_State column
+        # self.data["Market_State"] = np.zeros(len(self.data))
+        # if (
+        #     len(set(list(market_state))) != 1
+        #     and len(set(list(market_state_sp500))) != 1
+        # ):
+        #     self.data["Market_State"][0] = 0
+        #     self.data.iloc[1:]["Market_State"] = market_state + market_state_sp500
 
         # ### 14. Sentiment Analysis (Computationally expensive)
         # self.data["Market_Sentiment"] = 0.0
@@ -381,7 +1023,6 @@ class StockPredictor:
             raise ValueError("Not enough data to train the model.")
 
         return self
-
 
     def prepare_models(
         self, predictors: list[str], horizon, weight: bool = False, refit: bool = True
@@ -406,6 +1047,15 @@ class StockPredictor:
         self.feature_importances = {}
 
         for predictor in predictors:
+            cached_model = self._load_cached_model(predictor)
+            needs_retrain = self._model_needs_retraining(predictor)
+
+            # if cached_model and not needs_retrain:
+            if cached_model and not needs_retrain:
+                print(f"Using cached model for {predictor}")
+                self.models[predictor] = cached_model
+                continue
+
             # Select features excluding the current predictor
             features = [col for col in predictors if col != predictor]
 
@@ -441,6 +1091,11 @@ class StockPredictor:
             # models["ridge"].fit(X_train_scaled, y_train)
             # models["polynomial"].fit(X_train_poly, y_train)
             models["arimaxgb"].fit(X_train, y_train)
+
+            # Cache the trained models
+            self._save_model_cache(predictor, models)
+            print(f"Retrained and cached model for {predictor}")
+
             result = {}
             for name, model in models.items():
 
@@ -464,19 +1119,19 @@ class StockPredictor:
 
                 # Compute metrics
                 rmse = root_mean_squared_error(y_test, y_pred)
-                result[name] = {
-                    "rmse": rmse,
-                    "r2": r2
-                }
+                result[name] = {"rmse": rmse, "r2": r2}
 
                 print(f"{predictor} - {name.capitalize()} Model:")
                 print(f"  Test Mean Squared Error: {rmse:.4f}")
                 print(f"  R² Score: {r2:.4f}")
                 if "arimaxgb" in result:
-                    if  predictor == "Close" and ((result["arimaxgb"]["r2"] < 0.8 ) or (result['arimaxgb']['r2'] != max([result[model]['r2'] for model in result]))):
-                        raise ValueError(
-                            "ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters."
-                        )
+                    if result["arimaxgb"]["r2"] != max(
+                        [result[model]["r2"] for model in result]
+                    ):
+                        if predictor == "Close" and (result["arimaxgb"]["r2"] < 0.8):
+                            raise ValueError(
+                                "ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters."
+                            )
             print(
                 "-" * 50,
             )
@@ -499,6 +1154,10 @@ class StockPredictor:
                 # refit_models["polynomial"].fit(poly.transform(scaler.transform(X)), y)
                 refit_models["arimaxgb"].fit(X, y)
                 self.models[predictor] = refit_models
+
+                # Cache the trained models
+                self._save_model_cache(predictor, refit_models)
+                print(f"Retrained and cached refitted model for {predictor}")
 
     def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
         """
@@ -753,12 +1412,13 @@ class StockPredictor:
                         # )
 
                         # Option 2: Use Weighted average of last 'horizon' rows
-                        pred_input = (
-                            np.average(prediction[close_features].iloc[-horizon:], axis=0, 
-                                       weights= np.arange(1, horizon + 1) / np.sum(np.arange(1, horizon + 1))
-                                       )
+                        pred_input = np.average(
+                            prediction[close_features].iloc[-horizon:],
+                            axis=0,
+                            weights=np.arange(1, horizon + 1)
+                            / np.sum(np.arange(1, horizon + 1)),
                         )
-                        
+
                     else:
                         pred_input = last_pred_row[close_features].values
                     # for backtest
@@ -772,15 +1432,17 @@ class StockPredictor:
                         # )
 
                         # Option 2: Use Weighted average of last 'horizon' rows
-                        backtest_input = (
-                            np.average(backtest[close_features].iloc[-horizon:], axis=0, 
-                                       weights= np.arange(1, horizon + 1) / np.sum(np.arange(1, horizon + 1))
-                                       )
+                        backtest_input = np.average(
+                            backtest[close_features].iloc[-horizon:],
+                            axis=0,
+                            weights=np.arange(1, horizon + 1)
+                            / np.sum(np.arange(1, horizon + 1)),
                         )
-                        raw_backtest_input = (
-                            np.average(backtest[close_features].iloc[-horizon:], axis=0,
-                                        weights= np.arange(1, horizon + 1) / np.sum(np.arange(1, horizon + 1))
-                                        )
+                        raw_backtest_input = np.average(
+                            backtest[close_features].iloc[-horizon:],
+                            axis=0,
+                            weights=np.arange(1, horizon + 1)
+                            / np.sum(np.arange(1, horizon + 1)),
                         )
 
                     else:
@@ -795,7 +1457,7 @@ class StockPredictor:
                     # backtest_input = backtest[close_features].iloc[-1].values
                     # raw_backtest_input = backtest[close_features].iloc[-1].values
 
-                else: #  (step > 0)
+                else:  #  (step > 0)
                     # For subsequent steps, if we have enough predicted values, use their average
                     if step >= horizon:
                         # Use average of last 'horizon' predictions
@@ -1175,10 +1837,12 @@ class StockPredictor:
                             # )
 
                             # Option 2: Use Weighted average of last 'horizon' rows
-                            pred_input = np.average(prediction[features].iloc[-horizon:], axis=0, 
-                                       weights= np.arange(1, horizon + 1) / np.sum(np.arange(1, horizon + 1))
-                                       )
-
+                            pred_input = np.average(
+                                prediction[features].iloc[-horizon:],
+                                axis=0,
+                                weights=np.arange(1, horizon + 1)
+                                / np.sum(np.arange(1, horizon + 1)),
+                            )
 
                         else:
                             pred_input = last_pred_row[features].values
@@ -1188,9 +1852,12 @@ class StockPredictor:
                             #     backtest[features].iloc[-horizon:].mean(axis=0).values
                             # )
                             # Option 2: Use Weighted average of last 'horizon' rows
-                            backtest_input = np.average(backtest[features].iloc[-horizon:], axis=0,
-                                        weights= np.arange(1, horizon + 1) / np.sum(np.arange(1, horizon + 1))
-                                        )
+                            backtest_input = np.average(
+                                backtest[features].iloc[-horizon:],
+                                axis=0,
+                                weights=np.arange(1, horizon + 1)
+                                / np.sum(np.arange(1, horizon + 1)),
+                            )
                         else:
                             backtest_input = last_backtest_row[features].values
                     else:

@@ -23,6 +23,8 @@ setup(
         "pmdarima",
         "statsforecast"
         'pygam',
+        'schedule',
+        'alpaca_trade_api'
 
 
 

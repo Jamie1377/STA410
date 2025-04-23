@@ -399,14 +399,19 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
                 actual_changes[:min_len] == pred_changes[:min_len]
             )  # classfication accuracy
 
+            last_two_prediction = np.mean(
+                actual_changes[-2:] == pred_changes[-2:]
+            )  # classfication accuracy
+
+
             # First prediction deviation
 
             first_prediction_deviation = np.abs((preds[0] - y_val[0]) / y_val[0])
-            mean_pred_deviations = sum([np.abs((preds[i] - y_val[i]) / y_val[i]) for i in range(1, len(preds))]) // (len(preds)-1)
+            mean_pred_deviations = sum([np.abs((preds[i] - y_val[i]) / y_val[i]) for i in range(max(len(preds)//2, len(preds)-5) , len(preds))]) // (len(preds)-max(len(preds)//2, len(preds)-5) )
 
             # Combined loss (prioritize both accuracy and error)
             return (
-                0.7 * rmse + 0.3 * mape - 0.2 * dir_acc - 0.1 * volatility + 30 * first_prediction_deviation + 20 * mean_pred_deviations
+                0.7 * rmse + 0.3 * mape - 0.2 * dir_acc - 0.1 * volatility + 30 * first_prediction_deviation + 30 * mean_pred_deviations 
             )  
         # Rationale: if accuracy is high, the loss is low, and vice versa. In other words, if the model's directions are not accurate, the loss is high so it is penalized
         #  Volatility is encouraged to be high so that the model can be more flexible and adaptive to the market changes. The model is penalized if it is too conservative and not adaptive to the market changes.

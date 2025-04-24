@@ -2,7 +2,7 @@ from setuptools import setup, find_packages
 
 setup(
     name="stock_prediction_STA410",
-    version="0.1.4",
+    version="0.1.5",
     packages=find_packages(),
     install_requires=[
         "numpy",
@@ -25,11 +25,11 @@ setup(
         'pygam',
         'schedule',
         'alpaca_trade_api'
-
-
-
-
-    ],
+        ],
+    packages=find_packages(exclude=['model_cache', 'tests']),
+    exclude_package_data={
+        '': ['*.pkl', '*.joblib']
+        },
 )
 
 

@@ -1,0 +1,13 @@
+# Model caches
+model_cache/
+*.pkl
+*.joblib
+
+stock_prediction/docs/model_cache/
+*.pkl
+*.joblib
+
+# Large data files
+*.h5
+*.pth
+*.bin

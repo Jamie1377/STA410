@@ -1,0 +1,10 @@
+# MANIFEST.in
+include LICENSE
+include README.md
+include requirements.txt
+recursive-include stock_prediction *.py
+
+# Exclude caches
+prune model_cache
+exclude *.pkl
+exclude *.joblib

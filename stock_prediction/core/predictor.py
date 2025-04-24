@@ -289,33 +289,75 @@ class StockPredictor:
         hash_bytes = hash_series.values.tobytes()
         return hashlib.sha256(hash_bytes).hexdigest()
 
+    # def _load_cached_model(self, predictor):
+    #     cache_path = f"{self.model_cache_dir}/{predictor}.pkl"
+    #     if os.path.exists(cache_path):
+    #         return joblib.load(cache_path)
+    #     return None
+    
     def _load_cached_model(self, predictor):
         cache_path = f"{self.model_cache_dir}/{predictor}.pkl"
-        if os.path.exists(cache_path):
-            return joblib.load(cache_path)
-        return None
+        try:
+            if os.path.exists(cache_path) and os.path.getsize(cache_path) > 100:  # At least 100 bytes
+                return joblib.load(cache_path)
+            else:
+                print(f"Invalid cache file {cache_path} - regenerating")
+                os.remove(cache_path)  # Clean up invalid cache
+                return None
+        except Exception as e:
+            print(f"Cache load failed: {str(e)} - regenerating model") # HE START OF REGENERATING (KEY PART)
+            if os.path.exists(cache_path):
+                os.remove(cache_path)
+            return None
 
     def _save_model_cache(self, predictor, model):
         cache_path = f"{self.model_cache_dir}/{predictor}.pkl"
         joblib.dump(model, cache_path)
 
+
+    def _load_cached_result(self, model_type, horizon, output_type):
+        cache_path = f"{self.model_cache_dir}/{model_type}/Horizon_{horizon}/{output_type}.pkl"
+        try:
+            if os.path.exists(cache_path) and os.path.getsize(cache_path) > 100:  # At least 100 bytes
+                return joblib.load(cache_path)
+            else:
+                print(f"Invalid cache result {cache_path} - regenerating")
+                os.remove(cache_path)  # Clean up invalid cache
+                return None
+        except Exception as e:
+            print(f"Cache load failed: {str(e)} - regenerating results") # HE START OF REGENERATING (KEY PART)
+            if os.path.exists(cache_path):
+                os.remove(cache_path)
+            return None
+
+
+    
+    def _save_result(self, model_type, forecast, horizon, output_type):
+        """Save the forecast result to a cache file"""
+    
+        cache_path = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
+        joblib.dump(forecast, cache_path)
+
+    
+    
+
     def _model_needs_retraining(self, predictor):
         if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
             return True
-        current_hash = self._get_data_hash()
-        hash_file = f"{self.model_cache_dir}/{predictor}.hash"
+        # # current_hash = self._get_data_hash()
+        # hash_file = f"{self.model_cache_dir}/{predictor}.hash"
 
-        # If there is no hash file, create one
-        if not os.path.exists(hash_file):
-            return True
+        # # If there is no hash file, create one
+        # if not os.path.exists(hash_file):
+        #     return True
 
-        with open(hash_file, "r") as f:
-            saved_hash = f.read()
-        # Need to check if the data is updated
-        if current_hash != saved_hash:
-            with open(hash_file, "w") as f:
-                f.write(current_hash)
-            return True
+        # with open(hash_file, "r") as f:
+        #     saved_hash = f.read()
+        # # Need to check if the data is updated
+        # if current_hash != saved_hash:
+        #     with open(hash_file, "w") as f:
+        #         f.write(current_hash)
+        #     return True
         return False
 
     def _compute_rsi(self, window=14):
@@ -335,17 +377,17 @@ class StockPredictor:
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         return tr.rolling(window).mean()
 
-    def calculate_position_size(self, current_price, atr):
-        """Calculate position size using Average True Range"""
-        account = self.api.get_account()
-        portfolio_value = float(account.equity)
+    # def calculate_position_size(self):
+    #     """Calculate position size using Average True Range"""
+    #     account = self.api.get_account()
+    #     portfolio_value = float(account.equity)
 
-        # Risk per trade calculation
-        dollar_risk = portfolio_value * self.risk_params["per_trade_risk"]
-        volatility_risk = atr * current_price  # ATR in dollar terms
+    #     # Risk per trade calculation
+    #     dollar_risk = portfolio_value * self.risk_params["per_trade_risk"]
+    #     volatility_risk = atr * current_price  # ATR in dollar terms
 
-        position_size = dollar_risk / volatility_risk
-        return int(position_size)
+    #     position_size = dollar_risk / volatility_risk
+    #     return int(position_size)
 
     def get_sector_exposure(self):
         """Calculate current energy sector exposure"""
@@ -443,7 +485,7 @@ class StockPredictor:
         else:
             return "HOLD"
 
-    def generate_hft_signals(self, symbol, profit_target=0.0001):
+    def generate_hft_signals(self, symbol, profit_target=0.005):
         """Generate immediate execution signals with tight spreads"""
         signals = []
         # get cached model
@@ -461,8 +503,8 @@ class StockPredictor:
             )
 
         # Calculate bid/ask spread
-        bid_price = round(current_price * 0.9995, 2)
-        ask_price = round(current_price * 1.0005, 2)
+        bid_price = round(current_price * 0.99, 2)
+        ask_price = round(current_price * 1.005, 2)
 
         # Profit targets
         sell_target = round(current_price * (1 + profit_target), 2)
@@ -476,27 +518,27 @@ class StockPredictor:
             if symbol in positions:
                 position = self.api.get_open_position(symbol)
                 if float(position.unrealized_plpc) >= profit_target:
-                    signals.append(("SELL", float(position.qty), sell_target))
-                elif self.forecast_record[symbol] > current_price * 1.0001:
+                    signals.append(("SELL", int(position.qty), sell_target))
+                elif self.forecast_record[symbol] > current_price * 1.001:
                     print(f"Have position for {self.symbol}, but want to buy.")
-                    signals.append(("BUY", float(position.qty), buy_target))
+                    signals.append(("BUY", int(position.qty), buy_target))
 
             else:  # No open position of the symbol
-                if self.forecast_record[symbol] > current_price * 1.0001:
+                if self.forecast_record[symbol] > current_price * 1.001:
                     print(f"No open position for {self.symbol}, but want to buy.")
                     signals.append(
                         (
                             "BUY",
-                            max(round(self._calculate_position_size()), 5),
+                            round(self._calculate_position_size()),
                             buy_target,
                         )
                     )
-                elif self.forecast_record[symbol] < current_price * 0.9999:
+                elif self.forecast_record[symbol] < current_price * 0.999:
                     print(f"No open position for {self.symbol}, but want to sell.")
                     signals.append(
                         (
                             "SELL",
-                            max(round(self._calculate_position_size()), 5),
+                            round(self._calculate_position_size()),
                             sell_target,
                         )
                     )
@@ -511,10 +553,38 @@ class StockPredictor:
 
         return signals
 
+    # def _calculate_position_size(self):
+    #     """Risk-managed position sizing"""
+    #     account = self.api.get_account()
+    #     return float(account.buying_power) * 0.01 / self.data["Close"].iloc[-1]
+
     def _calculate_position_size(self):
-        """Risk-managed position sizing"""
+        """Ensure minimum quantity with fractional safety"""
         account = self.api.get_account()
-        return float(account.buying_power) * 0.01 / self.data["Close"].iloc[-1]
+        if datetime.now().hour < 16 and datetime.now().hour > 9:
+            current_price = (
+                yf.download(start=date.today(), tickers=self.symbol, interval="1m")
+                .Close.iloc[-1]
+                .values[0]
+            )
+        else:
+            current_price = (
+                yf.download(start=date.today(), tickers=self.symbol, interval="1d")
+                .Close.iloc[-1]
+                .values[0]
+            )
+        
+        # Calculate dollar amount
+        risk_amount = float(account.buying_power) * 0.01  # 1% risk
+        size = risk_amount / current_price
+        
+        # Enforce minimum quantity rules
+        if size < 0.5:  # Prevent tiny fractional orders
+            return 1
+        if 0.5 <= size < 1:
+            return round(size, 4)  # Allow fractional shares
+        else:
+            return round(size, 2)  # Round to nearest whole share
 
     def execute_trade(self, signal):
         # Cancel stale orders every 2 minutes
@@ -548,7 +618,7 @@ class StockPredictor:
         #     return
 
         # position_size = self.calculate_position_size(current_price, atr)
-        position_size = max(1, round(self.calculate_position_size(current_price, atr)))
+        position_size = round(self._calculate_position_size(current_price, atr))
         #  In case insufficient qty of shares
 
         # position_size = 20  # Placeholder for position size calculation
@@ -606,7 +676,7 @@ class StockPredictor:
                 if p.symbol == symbol:
                     market_order_data_sell = MarketOrderRequest(
                         symbol=symbol,
-                        qty=p.qty,
+                        qty=int(p.qty),
                         side=OrderSide.SELL,
                         type=OrderType.MARKET,
                         time_in_force=TimeInForce.GTC,
@@ -682,46 +752,115 @@ class StockPredictor:
                 except Exception as e:
                     print(f"Order failed: {str(e)}")
 
-    def execute_hft(self, symbol):
-        """Execute HFT strategy with cached models"""
-        # Cancel stale orders every 2 minutes
-        if datetime.now().minute % 2 == 0:
-            self._cancel_old_orders()
+    # def execute_hft(self, symbol):
+    #     """Execute HFT strategy with cached models"""
+    #     # Get signals using cached models
+    #     signals = self.generate_hft_signals(symbol=symbol)
 
+
+    #     # Batch order processing
+    #     orders = []
+    #     for side, qty, price in signals:
+    #         order_request = MarketOrderRequest(
+    #             symbol=symbol,
+    #             qty=abs(float(qty)),
+    #             side=OrderSide.SELL if side == "SELL" else OrderSide.BUY,
+    #             limit_price=price,
+    #             type=OrderType.LIMIT,
+    #             time_in_force=TimeInForce.GTC,
+    #             order_class = OrderClass.BRACKET,
+    #             take_profit=TakeProfitRequest(
+    #                 limit_price=(
+    #                     round(price * 1.005, 2)
+    #                     if side == "BUY"
+    #                     else round(price * 0.995, 2)
+    #                 )
+    #             ),
+    #             stop_loss=StopLossRequest(
+    #                 stop_price=(
+    #                     round(price * 0.98, 2)
+    #                     if side == "BUY"
+    #                     else round(price * 1.02, 2)
+    #                 ),
+    #                 limit_price=(
+    #                     round(price * 0.98, 2)
+    #                     if side == "BUY"
+    #                     else round(price * 1.02, 2)
+    #                 ),
+    #             ),
+    #         )
+
+    #         print(signals)
+            
+    #         self.api.submit_order(order_request)
+    def execute_hft(self, symbol, manual=False):
+        """Execute HFT strategy with cached models"""
         # Get signals using cached models
         signals = self.generate_hft_signals(symbol=symbol)
+        technology_sector = list(yf.Sector("technology").top_companies.index)
 
-        # Batch order processing
+        manual_signals = []
+        if manual == True:
+            if symbol in technology_sector:
+               for side, qty, price in signals:
+                    # manuall make side to be "BUY" 
+                    manual_signals.append(("BUY", qty, price))
+                    
+                    
         orders = []
+        if manual == True:
+            signals = manual_signals
         for side, qty, price in signals:
-            order_request = LimitOrderRequest(
+            # Ensure quantity is positive and valid
+            qty = abs(float(qty))
+            if qty <= 0:
+                print(f"Skipping invalid quantity: {qty}")
+                continue
+                
+            # Set appropriate take profit and stop loss levels
+            if side == "BUY":
+                take_profit_price = round(price * 1.003, 2)
+                stop_price = round(price * 0.985, 2)
+                stop_limit_price = round(price * 0.98, 2)  # Slightly lower than stop price
+            else:  # SELL
+                take_profit_price = round(price * 0.997, 2)
+                stop_price = round(price * 1.015, 2)
+                stop_limit_price = round(price * 1.02, 2)  # Slightly higher than stop price
+      
+                    
+            order_request = MarketOrderRequest(
                 symbol=symbol,
-                qty=round(float(qty)),
+                qty=qty,
                 side=OrderSide.SELL if side == "SELL" else OrderSide.BUY,
                 limit_price=price,
-                time_in_force=TimeInForce.DAY,
+                type=OrderType.LIMIT,
+                time_in_force=TimeInForce.GTC,
+                order_class=OrderClass.BRACKET,
                 take_profit=TakeProfitRequest(
-                    limit_price=(
-                        round(price * 1.0001, 2)
-                        if side == "BUY"
-                        else round(price * 0.9999, 2)
-                    )
+                    limit_price=take_profit_price
                 ),
                 stop_loss=StopLossRequest(
-                    stop_price=(
-                        round(price * 0.995, 2)
-                        if side == "BUY"
-                        else round(price * 1.005, 2)
-                    ),
-                    limit_price=(
-                        round(price * 0.99, 2)
-                        if side == "BUY"
-                        else round(price * 1.01, 2)
-                    ),
+                    stop_price=stop_price,
+                    limit_price=stop_limit_price,
                 ),
             )
-
-            self.api.submit_order(order_request)
+            
+            print(f"Attempting to submit {side} order for {qty} shares of {symbol} at {price}")
+            
+            try:
+                order = self.api.submit_order(order_request)
+                print(f"Order submitted: {order.id}")
+                
+                # Verify the order status
+                status = self.api.get_orders(order.id).status
+                print(f"Order status: {status}")
+                
+                orders.append(order)
+            except Exception as e:
+                print(f"Order submission failed: {str(e)}")
+        
+        return orders
+   
 
     def _cancel_old_orders(self):
         """Cancel orders older than 2 minutes"""
@@ -1051,7 +1190,8 @@ class StockPredictor:
             needs_retrain = self._model_needs_retraining(predictor)
 
             # if cached_model and not needs_retrain:
-            if cached_model and not needs_retrain:
+            if cached_model and needs_retrain is False:
+            # if cached_model:
                 print(f"Using cached model for {predictor}")
                 self.models[predictor] = cached_model
                 continue
@@ -1158,6 +1298,7 @@ class StockPredictor:
                 # Cache the trained models
                 self._save_model_cache(predictor, refit_models)
                 print(f"Retrained and cached refitted model for {predictor}")
+            
 
     def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
         """
@@ -1177,6 +1318,17 @@ class StockPredictor:
         Tuple[pd.DataFrame, pd.DataFrame]
             Forecasted data and backtest data
         """
+        
+        cached_final_prediction = self._load_cached_result(model_type=model_type,horizon=horizon,output_type="forecast")
+        cached_final_backtest = self._load_cached_result(model_type=model_type,horizon=horizon, output_type="backtest")
+        cached_final_raw_prediction = self._load_cached_result(model_type=model_type,horizon=horizon,output_type="raw_forecast")
+        cached_final_raw_backtest = self._load_cached_result(model_type=model_type,horizon=horizon,output_type="raw_backtest")
+
+        # if cached_model and not needs_retrain:
+        if cached_final_prediction is not None:
+            print(f"Using cached forecasts and backtests for {self.symbol}")
+            return cached_final_prediction, cached_final_backtest, cached_final_raw_prediction, cached_final_raw_backtest   
+
         # Ensure models are prepared
         if not self.models:
             raise ValueError("Please run prepare_models() first")
@@ -2056,6 +2208,20 @@ class StockPredictor:
         final_raw_prediction = pd.concat([prediction, raw_prediction_df])
         final_backtest = pd.concat([backtest, backtest_df])
         final_raw_backtest = pd.concat([backtest, raw_backtest_df])
+
+        # Cache the forecast results
+        # if the cache path does not exist, create it
+        
+        self._save_result(model_type=model_type, forecast=final_prediction, horizon=horizon, output_type="forecast")
+        self._save_result(model_type=model_type, forecast = final_raw_prediction, horizon=horizon, output_type="raw_forecast")
+        self._save_result(model_type=model_type, forecast = final_backtest, horizon=horizon, output_type="backtest")
+        self._save_result(model_type=model_type, forecast = final_raw_backtest, horizon=horizon, output_type="raw_backtest")
+
+        print(
+            f"Forecast result saved."
+        )
+        
+  
 
         return (
             final_prediction,

@@ -21,12 +21,12 @@ setup(
         "scikit-optimize",
         "hmmlearn",
         "pmdarima",
-        "statsforecast"
+        "statsforecast",
         'pygam',
         'schedule',
         'alpaca_trade_api'
         ],
-    packages=find_packages(exclude=['model_cache', 'tests']),
+    # packages=find_packages(exclude=['model_cache', 'tests']),
     exclude_package_data={
         '': ['*.pkl', '*.joblib']
         },

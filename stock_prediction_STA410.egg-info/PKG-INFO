@@ -1,6 +1,6 @@
-Metadata-Version: 2.2
+Metadata-Version: 2.4
 Name: stock_prediction_STA410
-Version: 0.1.4
+Version: 0.1.5
 License-File: LICENSE
 Requires-Dist: numpy
 Requires-Dist: pandas
@@ -18,6 +18,9 @@ Requires-Dist: mplcursors
 Requires-Dist: scikit-optimize
 Requires-Dist: hmmlearn
 Requires-Dist: pmdarima
-Requires-Dist: plotly
 Requires-Dist: statsforecast
+Requires-Dist: pygam
+Requires-Dist: schedule
+Requires-Dist: alpaca_trade_api
+Dynamic: license-file
 Dynamic: requires-dist

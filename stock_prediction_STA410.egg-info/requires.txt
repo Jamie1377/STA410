@@ -14,5 +14,7 @@ mplcursors
 scikit-optimize
 hmmlearn
 pmdarima
-plotly
 statsforecast
+pygam
+schedule
+alpaca_trade_api

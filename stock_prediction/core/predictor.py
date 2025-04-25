@@ -37,8 +37,8 @@ import hashlib
 import joblib
 
 # API imports
-api_key = "PKR0BKC0QMVXGC6WUYZB"
-secret_key = "nIonxysbSHIIC77ojMjiQPgCrug78echi1IcZMe8"
+api_key = "PK8Z3VDFBGIPX2O8MN0R"
+secret_key = "Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE"
 paper = True
 # DO not change this
 trade_api_url = None
@@ -316,7 +316,7 @@ class StockPredictor:
 
 
     def _load_cached_result(self, model_type, horizon, output_type):
-        cache_path = f"{self.model_cache_dir}/{model_type}/Horizon_{horizon}/{output_type}.pkl"
+        cache_path = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
         try:
             if os.path.exists(cache_path) and os.path.getsize(cache_path) > 100:  # At least 100 bytes
                 return joblib.load(cache_path)
@@ -397,6 +397,7 @@ class StockPredictor:
         return total_value / float(self.api.get_account().equity)
 
     def generate_trading_signal(self, predictor, symbol):
+        """Generate trading signal using cached models"""
         predictor.load_data()
         lookback = optimize_lookback(
             predictor.data.drop(columns="Close"),
@@ -451,10 +452,20 @@ class StockPredictor:
         ]  # Use same features as in notebook
         horizon = 5  # Prediction window
 
-        predictor.prepare_models(features, horizon=horizon)
-        forecast, _, _, _ = predictor.one_step_forward_forecast(
-            predictors=features, model_type="arimaxgb", horizon=horizon
-        )
+        cached_results = self._load_cached_result(model_type='arimaxgb', horizon=5, output_type='foerecast')
+        needs_retrain = self._model_needs_retraining(predictor)
+
+        # if cached_model and not needs_retrain:
+        if cached_results and needs_retrain is False:
+        # if cached_model:
+            print(f"Using cached results for {predictor}")
+            forecast = cached_results
+        else: # Regenerate model
+            print(f"Regenerating model for {predictor}")
+            predictor.prepare_models(features, horizon=horizon)
+            forecast, _, _, _ = predictor.one_step_forward_forecast(
+                predictors=features, model_type="arimaxgb", horizon=horizon
+            )
 
         # Get latest prediction
         predicted_price = forecast["Close"].iloc[-1]
@@ -590,6 +601,8 @@ class StockPredictor:
         # Cancel stale orders every 2 minutes
         if datetime.now().minute % 2 == 0:
             self._cancel_old_orders()
+
+    
 
         symbol = self.symbol
         # current_price = self.data['Close'].iloc[-1]

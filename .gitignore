@@ -2,10 +2,12 @@
 model_cache/
 *.pkl
 *.joblib
+*.hash
 
 stock_prediction/docs/model_cache/
 *.pkl
 *.joblib
+*.hash
 
 # Large data files
 *.h5

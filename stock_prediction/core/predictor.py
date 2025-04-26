@@ -1,6 +1,9 @@
 from stock_prediction.utils import seed_everything
 
 seed_everything(42)
+import warnings
+warnings.filterwarnings('ignore')
+
 import numpy as np
 import yfinance as yf
 import pandas as pd
@@ -54,9 +57,11 @@ from alpaca.trading.client import TradingClient
 from alpaca.trading.requests import (
     MarketOrderRequest,
     LimitOrderRequest,
+    StopLimitOrderRequest,
     StopLossRequest,
     TakeProfitRequest,
     GetOrdersRequest,
+
     
 )
 from alpaca.trading.enums import (
@@ -67,10 +72,12 @@ from alpaca.trading.enums import (
     QueryOrderStatus,
 )
 from alpaca.trading.enums import OrderSide, TimeInForce
-from alpaca.data.historical import StockHistoricalDataClient
-from alpaca.data.requests import StockLatestTradeRequest
+from alpaca.data.historical import StockHistoricalDataClient, CryptoHistoricalDataClient
+from alpaca.data.requests import StockLatestTradeRequest, CryptoLatestTradeRequest
+
 
 data_client = StockHistoricalDataClient(api_key='PK8Z3VDFBGIPX2O8MN0R', secret_key='Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE')
+crypto_data_client = CryptoHistoricalDataClient(api_key='PK8Z3VDFBGIPX2O8MN0R', secret_key='Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE')
 trading_client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
 # api = tradeapi.REST(
 #     key_id='PKR0BKC0QMVXGC6WUYZB',
@@ -427,12 +434,13 @@ class StockPredictor:
     #         return True
     #     return False
 
-    def _model_needs_retraining(self, predictor):
+    def _model_needs_retraining(self, predictor, crypto=True):
         """Check if model needs retraining based on date and data hash"""
         # Check if today is a new trading day
-        if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
-            print(f"New trading day detected - retraining {predictor}")
-            return True
+        if  crypto == False:
+            if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
+                print(f"New trading day detected - retraining {predictor}")
+                return True
             
         # Calculate current data hash
         current_hash = self._get_data_hash()
@@ -699,7 +707,8 @@ class StockPredictor:
 
         # Get latest prediction
         predicted_price = forecast["Close"].iloc[-1]
-        self.forecast_record[symbol] = predicted_price
+        alpaca_symbol = symbol.replace('-','/')  # Remove the last 4 characters
+        self.forecast_record[alpaca_symbol] = predicted_price
         # current_price = predictor.data['Close'].iloc[-1]
         if datetime.now().hour < 16 and datetime.now().hour > 9:
             current_price = (
@@ -742,9 +751,18 @@ class StockPredictor:
         #         .Close.iloc[-1]
         #         .values[0]
         #     )
-        request = StockLatestTradeRequest(symbol_or_symbols=symbol)
-        latest_trade = data_client.get_stock_latest_trade(request)
-        current_price = latest_trade[symbol].price
+        alpaca_symbol = symbol.replace('-','/')  # Remove the last 4 characters
+        try:
+            request = StockLatestTradeRequest(symbol_or_symbols=alpaca_symbol)
+            latest_trade = data_client.get_stock_latest_trade(request)
+        except Exception as e:
+            print(f"Not Stock but Crypto")
+            request = CryptoLatestTradeRequest(symbol_or_symbols=alpaca_symbol)
+            latest_trade = crypto_data_client.get_crypto_latest_trade(request)
+            
+
+      
+        current_price = latest_trade[alpaca_symbol].price
         print(f"Current price: {current_price}")
         
 
@@ -762,16 +780,16 @@ class StockPredictor:
             positions = [position.symbol for position in self.api.get_all_positions()]
 
             if symbol in positions:
-                position = self.api.get_open_position(symbol)
+                position = self.api.get_open_position(alpaca_symbol)
                 if float(position.unrealized_plpc) >= profit_target:
                     signals.append(("SELL", int(position.qty), buy_target))
                 elif self.forecast_record[symbol] > current_price * 1.001:
-                    print(f"Have position for {self.symbol}, but want to buy.")
+                    print(f"Have position for {symbol}, but want to buy.")
                     signals.append(("BUY", int(position.qty), sell_target))
 
             else:  # No open position of the symbol
-                if self.forecast_record[symbol] > current_price * 1.001:
-                    print(f"No open position for {self.symbol}, but want to buy.")
+                if self.forecast_record[alpaca_symbol] > current_price * 1.001:
+                    print(f"No open position for {alpaca_symbol}, but want to buy.")
                     signals.append(
                         (
                             "BUY",
@@ -779,7 +797,7 @@ class StockPredictor:
                             sell_target,
                         )
                     )
-                elif self.forecast_record[symbol] < current_price * 0.999:
+                elif self.forecast_record[alpaca_symbol] < current_price * 0.999:
                     print(f"No open position for {self.symbol}, but want to sell.")
                     signals.append(
                         (
@@ -820,9 +838,14 @@ class StockPredictor:
         #         .Close.iloc[-1]
         #         .values[0]
         #     )
-        request = StockLatestTradeRequest(symbol_or_symbols=self.symbol)
-        latest_trade = data_client.get_stock_latest_trade(request)
-        current_price = latest_trade[self.symbol].price
+        alpaca_symbol = self.symbol.replace('-','/')  # Remove the last 4 characters
+        try:
+            request = StockLatestTradeRequest(symbol_or_symbols=alpaca_symbol)
+            latest_trade = data_client.get_stock_latest_trade(request)
+        except Exception as e:
+            request = CryptoLatestTradeRequest(symbol_or_symbols=alpaca_symbol)
+            latest_trade = crypto_data_client.get_crypto_latest_trade(request)
+        current_price = latest_trade[alpaca_symbol].price
 
         
         # Calculate dollar amount
@@ -1046,7 +1069,7 @@ class StockPredictor:
     #         print(signals)
             
     #         self.api.submit_order(order_request)
-    def execute_hft(self, symbol, manual=False):
+    def execute_hft(self, symbol, manual=False, crypto=False):
         """Execute HFT strategy with cached models"""
         # Get signals using cached models
         signals = self.generate_hft_signals(symbol=symbol)
@@ -1086,24 +1109,46 @@ class StockPredictor:
 
            
             
-                    
-            order_request = MarketOrderRequest(
-                symbol=symbol,
-                qty=qty,
-                side=OrderSide.SELL if side == "SELL" else OrderSide.BUY,
-                limit_price=price,
-                type=OrderType.LIMIT,
-                time_in_force=TimeInForce.GTC,
-                order_class=OrderClass.BRACKET,
-                take_profit=TakeProfitRequest(
-                    limit_price=take_profit_price
-                ),
-                stop_loss=StopLossRequest(
-                    stop_price=stop_price,
-                    # limit_price=stop_limit_price,
-                ),
-            )
-            
+            alpaca_symbol = symbol.replace('-','/')
+            print(f"Symbol for order: {alpaca_symbol}")
+            if crypto == True:
+                alpaca_symbol = symbol.replace('-','/')
+                # alpaca_symbol = symbol.replace('-','/')
+                order_request = MarketOrderRequest(
+                    symbol=alpaca_symbol, #symbol
+                    qty=qty,
+                    side=OrderSide.SELL if side == "SELL" else OrderSide.BUY,
+                    limit_price=price,
+                    type=OrderType.LIMIT,
+                    time_in_force=TimeInForce.GTC,
+                    # order_class=OrderClass.SIMPLE,
+                    take_profit=TakeProfitRequest(
+                        limit_price=take_profit_price
+                    ),
+                    stop_loss=StopLossRequest(
+                        stop_price=stop_price,
+                        # limit_price=stop_limit_price,
+                    ),
+                )
+                
+            else: # not crypto
+                order_request = MarketOrderRequest(
+                    symbol= alpaca_symbol, #symbol
+                    qty=qty,
+                    side=OrderSide.SELL if side == "SELL" else OrderSide.BUY,
+                    limit_price=price,
+                    type=OrderType.LIMIT,
+                    time_in_force=TimeInForce.GTC,
+                    order_class=OrderClass.BRACKET,
+                    take_profit=TakeProfitRequest(
+                        limit_price=take_profit_price
+                    ),
+                    stop_loss=StopLossRequest(
+                        stop_price=stop_price,
+                        # limit_price=stop_limit_price,
+                    ),
+                )
+                
             print(f"Attempting to submit {side} order for {qty} shares of {symbol} at {price}")
             
             try:
@@ -1515,9 +1560,9 @@ class StockPredictor:
 
                     # Compute adjusted R^2  # original one r2_score(y_test, y_pred)
                     r2 = r2_score(y_true=y_test, y_pred=y_pred)
-                    adj_r2 = 1 - (1 - r2_score(y_true=y_test, y_pred=y_pred)) * (
-                        X_test.shape[0] - 1
-                    ) / (X_test.shape[0] - X_test.shape[1] - 1)
+                    # adj_r2 = 1 - (1 - r2_score(y_true=y_test, y_pred=y_pred)) * (
+                    #     X_test.shape[0] - 1
+                    # ) / (X_test.shape[0] - X_test.shape[1] - 1)
 
                     # Compute metrics
                     rmse = root_mean_squared_error(y_test, y_pred)

@@ -35,6 +35,7 @@ import pandas as pd
 from datetime import timedelta
 import hashlib
 import joblib
+import pickle
 
 # API imports
 api_key = "PK8Z3VDFBGIPX2O8MN0R"
@@ -56,6 +57,7 @@ from alpaca.trading.requests import (
     StopLossRequest,
     TakeProfitRequest,
     GetOrdersRequest,
+    
 )
 from alpaca.trading.enums import (
     OrderSide,
@@ -64,7 +66,11 @@ from alpaca.trading.enums import (
     OrderClass,
     QueryOrderStatus,
 )
+from alpaca.trading.enums import OrderSide, TimeInForce
+from alpaca.data.historical import StockHistoricalDataClient
+from alpaca.data.requests import StockLatestTradeRequest
 
+data_client = StockHistoricalDataClient(api_key='PK8Z3VDFBGIPX2O8MN0R', secret_key='Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE')
 trading_client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
 # api = tradeapi.REST(
 #     key_id='PKR0BKC0QMVXGC6WUYZB',
@@ -274,27 +280,74 @@ class StockPredictor:
             "daily_loss_limit": -0.03,  # -3% daily loss threshold
         }
         self.api = trading_client
+        self.data_client = data_client
         self.model_cache_dir = f"model_cache/{self.symbol}"
         os.makedirs(self.model_cache_dir, exist_ok=True)
         self.data_hash = None
         self.forecast_record = {}
 
+
+################################################################################
+    
     # def _get_data_hash(self):
     #     """Generate unique hash of the training data"""
-    #     return hashlib.sha256(pd.util.hash_pandas_object(self.data).h)
-
+    #     hash_series = pd.util.hash_pandas_object(self.data, index=True)
+    #     hash_bytes = hash_series.values.tobytes()
+    #     return hashlib.sha256(hash_bytes).hexdigest()
     def _get_data_hash(self):
-        """Generate unique hash of the training data"""
-        hash_series = pd.util.hash_pandas_object(self.data, index=True)
+        """Generate a stable hash of the training data"""
+        # Create a more deterministic representation of the data
+        data_copy = self.data.copy()
+        
+        # Round numeric columns to reduce floating point variation
+        for col in data_copy.select_dtypes(include=['float']).columns:
+            data_copy[col] = data_copy[col].round(4)
+        
+        # Get key identifiers that would determine if retraining is needed
+        start_date = str(data_copy.index[0].date())
+        end_date = str(data_copy.index[-1].date())
+        num_rows = len(data_copy)
+        columns = ','.join(sorted(data_copy.columns))
+        
+        # Create a deterministic string representation
+        hash_input = f"{start_date}_{end_date}_{num_rows}_{columns}"
+        
+        # Add some data sampling to detect actual data changes
+        # Sample a few values from the beginning, middle, and end of the dataset
+        if num_rows > 10:
+            sample_indices = [0, num_rows//4, num_rows//2, 3*num_rows//4, num_rows-1]
+            for idx in sample_indices:
+                hash_input += "_" + str(data_copy.iloc[idx]['Close'])
+        
+        # Generate hash
+        return hashlib.sha256(hash_input.encode()).hexdigest()
+
+    # def _get_data_hash(self):
+    #     """Generate more stable hash of the training data"""
+    #     # Round numeric values to reduce floating point variation
+    #     numeric_cols = self.data.select_dtypes(include=['number']).columns
+    #     data_copy = self.data.copy()
+        
+    #     # Round numeric columns to a fixed precision
+    #     for col in numeric_cols:
+    #         data_copy[col] = data_copy[col].round(6)
+        
+    #     # Include only the key information in the hash
+    #     # Consider using only the raw price data and dates, not derived features
+    #     # hash_series = pd.util.hash_pandas_object(data_copy[['Close', 'Open', 'High', 'Low']], index=True)
+    #     hash_series = pd.util.hash_pandas_object(data_copy, index=True)
+    #     hash_bytes = hash_series.values.tobytes()
+    #     return hashlib.sha256(hash_bytes).hexdigest()
+
+    def _get_forecast_hash(self, forecast):
+        """Generate unique hash of the forecast data"""
+        # Round numeric values to reduce floating point variation
+        numeric_cols = forecast.select_dtypes(include=['number']).columns
+        forecast_copy = forecast.copy()
+        hash_series = pd.util.hash_pandas_object(forecast_copy, index=True)
         hash_bytes = hash_series.values.tobytes()
         return hashlib.sha256(hash_bytes).hexdigest()
 
-    # def _load_cached_model(self, predictor):
-    #     cache_path = f"{self.model_cache_dir}/{predictor}.pkl"
-    #     if os.path.exists(cache_path):
-    #         return joblib.load(cache_path)
-    #     return None
-    
     def _load_cached_model(self, predictor):
         cache_path = f"{self.model_cache_dir}/{predictor}.pkl"
         try:
@@ -312,53 +365,229 @@ class StockPredictor:
 
     def _save_model_cache(self, predictor, model):
         cache_path = f"{self.model_cache_dir}/{predictor}.pkl"
+        hash_file = f"{self.model_cache_dir}/{predictor}.hash"
         joblib.dump(model, cache_path)
+        current_hash = self._get_data_hash()
+        with open(hash_file, "w", encoding='utf-8') as f:
+            f.write(current_hash)
+        # joblib.dump(current_hash, hash_file)
+
+        
+
+        
+       
 
 
-    def _load_cached_result(self, model_type, horizon, output_type):
-        cache_path = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
-        try:
-            if os.path.exists(cache_path) and os.path.getsize(cache_path) > 100:  # At least 100 bytes
-                return joblib.load(cache_path)
-            else:
-                print(f"Invalid cache result {cache_path} - regenerating")
-                os.remove(cache_path)  # Clean up invalid cache
-                return None
-        except Exception as e:
-            print(f"Cache load failed: {str(e)} - regenerating results") # HE START OF REGENERATING (KEY PART)
-            if os.path.exists(cache_path):
-                os.remove(cache_path)
-            return None
+    # def _load_cached_result(self, model_type, horizon, output_type):
+    #     cache_path = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
+    #     try:
+    #         if os.path.exists(cache_path) and os.path.getsize(cache_path) > 100:  # At least 100 bytes
+    #             return joblib.load(cache_path)
+    #         else:
+    #             print(f"Invalid cache result {cache_path} - regenerating")
+    #             os.remove(cache_path)  # Clean up invalid cache
+    #             return None
+    #     except Exception as e:
+    #         print(f"Cache load failed: {str(e)} - regenerating results") # HE START OF REGENERATING (KEY PART)
+    #         if os.path.exists(cache_path):
+    #             os.remove(cache_path)
+    #         return None
 
 
     
-    def _save_result(self, model_type, forecast, horizon, output_type):
-        """Save the forecast result to a cache file"""
+    # def _save_result(self, model_type, forecast, horizon, output_type):
+    #     """Save the forecast result to a cache file"""
     
-        cache_path = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
-        joblib.dump(forecast, cache_path)
+    #     cache_path = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
+    #     joblib.dump(forecast, cache_path)
+    #     current_hash = self._get_data_hash()
+    #     with open(f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.hash", "w") as f:
+    #         f.write(current_hash)
+
 
     
     
+
+    # def _model_needs_retraining(self, predictor):
+    #     if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
+    #         return True
+    #     current_hash = self._get_data_hash()
+    #     hash_file = f"{self.model_cache_dir}/{predictor}.hash"
+
+    #     # If there is no hash file, create one
+    #     if not os.path.exists(hash_file):
+    #         return True
+
+    #     with open(hash_file, "r") as f:
+    #         saved_hash = f.read()
+    #     # Need to check if the data is updated
+    #     if current_hash != saved_hash:
+    #         with open(hash_file, "w") as f:
+    #             f.write(current_hash)
+    #         return True
+    #     return False
 
     def _model_needs_retraining(self, predictor):
+        """Check if model needs retraining based on date and data hash"""
+        # Check if today is a new trading day
         if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
+            print(f"New trading day detected - retraining {predictor}")
             return True
-        # # current_hash = self._get_data_hash()
-        # hash_file = f"{self.model_cache_dir}/{predictor}.hash"
-
-        # # If there is no hash file, create one
-        # if not os.path.exists(hash_file):
-        #     return True
-
-        # with open(hash_file, "r") as f:
-        #     saved_hash = f.read()
-        # # Need to check if the data is updated
-        # if current_hash != saved_hash:
-        #     with open(hash_file, "w") as f:
-        #         f.write(current_hash)
-        #     return True
+            
+        # Calculate current data hash
+        current_hash = self._get_data_hash()
+        print(f"Current hash: {current_hash}")
+        hash_file = f"{self.model_cache_dir}/{predictor}.hash"
+        
+        # If hash file doesn't exist, create it and retrain
+        if not os.path.exists(hash_file):
+            with open(hash_file, "w", encoding='utf-8') as f:
+                f.write(current_hash)
+            print(f"No previous hash found - retraining {predictor}")
+            return True
+        
+        # Compare current hash with saved hash
+        with open(hash_file, "r", encoding='utf-8') as f:
+                # saved_hash = joblib.load(f)  
+                saved_hash = str(f.read().strip())  #rb
+                print(f"Saved hash: {saved_hash}")
+        
+        if current_hash not in saved_hash:
+            print(f"Data has changed - retraining {predictor}")
+            # Only update hash file AFTER successful training, not here
+            return True
+            
+        print(f"No changes detected - using cached model for {predictor}")
         return False
+
+    
+    def _load_cached_result(self, model_type, horizon, output_type):
+        """Load cached forecast result if valid"""
+        cache_path = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
+        
+        # First check if we need to regenerate based on data changes
+        if not self.forecast_needs_reoutput(horizon, output_type, model_type):
+            try:
+                if os.path.exists(cache_path) and os.path.getsize(cache_path) > 100:  # At least 100 bytes
+                    print(f"Using cached forecast for {horizon}days_{output_type}_{model_type}")
+                    return joblib.load(cache_path)
+            except Exception as e:
+                print(f"Cache load failed: {str(e)}")
+        
+        # Either needs regeneration or load failed
+        print(f"Regenerating forecast for {horizon}days_{output_type}_{model_type}")
+        if os.path.exists(cache_path):
+            os.remove(cache_path)
+        return None
+
+###############################################################################################
+    # Results
+    def _save_result(self, model_type, forecast, horizon, output_type):
+        """Save the forecast result to a cache file"""
+        cache_path = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
+        hash_file = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.hash"
+        
+        # Save the forecast
+        joblib.dump(forecast, cache_path)
+        
+        # Update the hash file
+        current_hash = self._get_data_hash()
+        # with open(hash_file, "w") as f:
+        #     f.write(current_hash)
+        # Save the hash 
+        with open(hash_file, "w", encoding='utf-8') as f:
+            # joblib.dump(current_hash, f)
+            f.write(current_hash)
+
+        
+        
+        print(f"Saved forecast for {horizon}days_{output_type}_{model_type}")
+
+    def forecast_needs_reoutput(self, horizon, output_type, model_type):
+        """Check if forecast needs reoutput based on date and data hash"""
+        # Check if today is a new trading day
+        if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
+            print(f"New trading day detected - reoutput {output_type}")
+            return True
+            
+        # Calculate current data hash
+        current_hash = self._get_data_hash()
+        hash_file = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.hash"  # Fixed extension
+        
+        # If hash file doesn't exist, create it and regenerate
+        if not os.path.exists(hash_file):
+            print(f"No previous hash found - reoutput {output_type}")
+            return True
+        
+        # Compare current hash with saved hash
+        try:
+            with open(hash_file, "r", encoding='utf-8') as f:
+                saved_hash = str(f.read().strip())  # rb
+                # saved_hash = joblib.load(f)  # rb
+        except Exception as e:
+            print(f"Hash load failed: {str(e)}")
+           
+        
+        if current_hash not in saved_hash:
+            print(f"Data has changed - reoutput {output_type}")
+            return True
+            
+        return False
+    
+
+
+    
+
+
+
+    # def forecast_needs_reoutput(self, forecast, horizon, output_type, model_type):
+    #     """Check if the forecast needs to be re-output"""
+    #     current_hash = self._get_forecast_hash(forecast)
+    #     hash_file = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
+
+    #     # If there is no hash file, create one
+    #     if not os.path.exists(hash_file):
+    #         return True
+
+    #     with open(hash_file, "r") as f:
+    #         saved_hash = f.read()
+    #     # Need to check if the data is updated
+    #     if current_hash != saved_hash:
+    #         with open(hash_file, "w") as f:
+    #             f.write(current_hash)
+    #         return True
+    #     return False
+    # def forecast_needs_reoutput(self, forecast, horizon, output_type, model_type):
+    #     """Check if forecast needs reoutput based on date and data hash"""
+    #     # Check if today is a new trading day
+    #     if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
+    #         print(f"New trading day detected - reoutput {output_type}")
+    #         return True
+            
+    #     # Calculate current data hash
+    #     current_hash = self._get_data_hash()
+    #     hash_file = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
+
+    #     # If hash file doesn't exist, create it and retrain
+    #     if not os.path.exists(hash_file):
+    #         with open(hash_file, "w") as f:
+    #             f.write(current_hash)
+    #         print(f"No previous hash found - reoutput {output_type}")
+    #         return True
+        
+    #     # Compare current hash with saved hash
+    #     with open(hash_file, "r") as f:
+    #         saved_hash = f.read().strip()  # Added strip() to remove whitespace
+        
+    #     if current_hash != saved_hash:
+    #         print(f"Data has changed - reoutput {output_type}")
+    #         # Only update hash file AFTER successful training, not here
+    #         return True
+            
+    #     print(f"No changes detected - using cached output for {output_type}")
+    #     return False
+
+
 
     def _compute_rsi(self, window=14):
         """Custom RSI implementation"""
@@ -453,19 +682,20 @@ class StockPredictor:
         horizon = 5  # Prediction window
 
         cached_results = self._load_cached_result(model_type='arimaxgb', horizon=5, output_type='foerecast')
-        needs_retrain = self._model_needs_retraining(predictor)
+        needs_reoutput = self.forecast_needs_reoutput(horizon=5, output_type='foerecast', model_type='arimaxgb')
 
         # if cached_model and not needs_retrain:
-        if cached_results and needs_retrain is False:
-        # if cached_model:
-            print(f"Using cached results for {predictor}")
+        if cached_results and needs_reoutput is False:
+            print(f"Using cached results for {symbol} prediction")
             forecast = cached_results
         else: # Regenerate model
-            print(f"Regenerating model for {predictor}")
+            print(f"Regenerating model")
             predictor.prepare_models(features, horizon=horizon)
             forecast, _, _, _ = predictor.one_step_forward_forecast(
                 predictors=features, model_type="arimaxgb", horizon=horizon
             )
+        
+      
 
         # Get latest prediction
         predicted_price = forecast["Close"].iloc[-1]
@@ -500,18 +730,23 @@ class StockPredictor:
         """Generate immediate execution signals with tight spreads"""
         signals = []
         # get cached model
-        if datetime.now().hour < 16 and datetime.now().hour > 9:
-            current_price = (
-                yf.download(start=date.today(), tickers=symbol, interval="1m")
-                .Close.iloc[-1]
-                .values[0]
-            )
-        else:
-            current_price = (
-                yf.download(start=date.today(), tickers=symbol, interval="1d")
-                .Close.iloc[-1]
-                .values[0]
-            )
+        # if datetime.now().hour < 16 and datetime.now().hour > 9:
+        #     current_price = (
+        #         yf.download(start=date.today(), tickers=symbol, interval="1m")
+        #         .Close.iloc[-1]
+        #         .values[0]
+        #     )
+        # else:
+        #     current_price = (
+        #         yf.download(start=date.today(), tickers=symbol, interval="1d")
+        #         .Close.iloc[-1]
+        #         .values[0]
+        #     )
+        request = StockLatestTradeRequest(symbol_or_symbols=symbol)
+        latest_trade = data_client.get_stock_latest_trade(request)
+        current_price = latest_trade[symbol].price
+        print(f"Current price: {current_price}")
+        
 
         # Calculate bid/ask spread
         bid_price = round(current_price * 0.99, 2)
@@ -529,10 +764,10 @@ class StockPredictor:
             if symbol in positions:
                 position = self.api.get_open_position(symbol)
                 if float(position.unrealized_plpc) >= profit_target:
-                    signals.append(("SELL", int(position.qty), sell_target))
+                    signals.append(("SELL", int(position.qty), buy_target))
                 elif self.forecast_record[symbol] > current_price * 1.001:
                     print(f"Have position for {self.symbol}, but want to buy.")
-                    signals.append(("BUY", int(position.qty), buy_target))
+                    signals.append(("BUY", int(position.qty), sell_target))
 
             else:  # No open position of the symbol
                 if self.forecast_record[symbol] > current_price * 1.001:
@@ -541,7 +776,7 @@ class StockPredictor:
                         (
                             "BUY",
                             round(self._calculate_position_size()),
-                            buy_target,
+                            sell_target,
                         )
                     )
                 elif self.forecast_record[symbol] < current_price * 0.999:
@@ -550,7 +785,7 @@ class StockPredictor:
                         (
                             "SELL",
                             round(self._calculate_position_size()),
-                            sell_target,
+                            buy_target,
                         )
                     )
         except Exception:
@@ -561,7 +796,8 @@ class StockPredictor:
         #     ("BUY", self._calculate_position_size(), bid_price),
         #     ("SELL", self._calculate_position_size(), ask_price)
         # ])
-
+        print(f"Generated hft signals: {signals}")
+        print(f"forecast_record: {self.forecast_record}")
         return signals
 
     # def _calculate_position_size(self):
@@ -572,18 +808,22 @@ class StockPredictor:
     def _calculate_position_size(self):
         """Ensure minimum quantity with fractional safety"""
         account = self.api.get_account()
-        if datetime.now().hour < 16 and datetime.now().hour > 9:
-            current_price = (
-                yf.download(start=date.today(), tickers=self.symbol, interval="1m")
-                .Close.iloc[-1]
-                .values[0]
-            )
-        else:
-            current_price = (
-                yf.download(start=date.today(), tickers=self.symbol, interval="1d")
-                .Close.iloc[-1]
-                .values[0]
-            )
+        # if datetime.now().hour < 16 and datetime.now().hour > 9:
+        #     current_price = (
+        #         yf.download(start=date.today(), tickers=self.symbol, interval="1m")
+        #         .Close.iloc[-1]
+        #         .values[0]
+        #     )
+        # else:
+        #     current_price = (
+        #         yf.download(start=date.today(), tickers=self.symbol, interval="1d")
+        #         .Close.iloc[-1]
+        #         .values[0]
+        #     )
+        request = StockLatestTradeRequest(symbol_or_symbols=self.symbol)
+        latest_trade = data_client.get_stock_latest_trade(request)
+        current_price = latest_trade[self.symbol].price
+
         
         # Calculate dollar amount
         risk_amount = float(account.buying_power) * 0.01  # 1% risk
@@ -832,14 +1072,20 @@ class StockPredictor:
                 
             # Set appropriate take profit and stop loss levels
             if side == "BUY":
-                take_profit_price = round(price * 1.003, 2)
+                take_profit_price = round(price * 1.003 , 2)
+                take_profit_price = max(take_profit_price, price + 0.01)  # Ensure it's higher than the current price
                 stop_price = round(price * 0.985, 2)
                 stop_limit_price = round(price * 0.98, 2)  # Slightly lower than stop price
+                print(f"BUY order: take_profit_price {take_profit_price}, stop_price {stop_price}, stop_limit_price{stop_limit_price}")
             else:  # SELL
-                take_profit_price = round(price * 0.997, 2)
+                take_profit_price = round(price * 0.997-0.01, 2) 
+                take_profit_price = min(take_profit_price, price - 0.01)
                 stop_price = round(price * 1.015, 2)
                 stop_limit_price = round(price * 1.02, 2)  # Slightly higher than stop price
-      
+                print(f"SELL order: take_profit_price {take_profit_price}, stop_price {stop_price}, stop_limit_price{stop_limit_price}")
+
+           
+            
                     
             order_request = MarketOrderRequest(
                 symbol=symbol,
@@ -854,7 +1100,7 @@ class StockPredictor:
                 ),
                 stop_loss=StopLossRequest(
                     stop_price=stop_price,
-                    limit_price=stop_limit_price,
+                    # limit_price=stop_limit_price,
                 ),
             )
             
@@ -1203,115 +1449,123 @@ class StockPredictor:
             needs_retrain = self._model_needs_retraining(predictor)
 
             # if cached_model and not needs_retrain:
-            if cached_model and needs_retrain is False:
+            if cached_model and not needs_retrain:
             # if cached_model:
                 print(f"Using cached model for {predictor}")
                 self.models[predictor] = cached_model
-                continue
+            else:
+                print(f"Training new model for {predictor}")
 
-            # Select features excluding the current predictor
-            features = [col for col in predictors if col != predictor]
+              
+                # Select features excluding the current predictor
+                features = [col for col in predictors if col != predictor]
 
-            # Prepare data
-            X = self.data[features].iloc[:-horizon,]
-            y = self.data[predictor].iloc[:-horizon,]
+                # Prepare data
+                X = self.data[features].iloc[:-horizon,]
+                y = self.data[predictor].iloc[:-horizon,]
 
-            # Split data
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.2, random_state=42
-            )
+                # Split data
+                X_train, X_test, y_train, y_test = train_test_split(
+                    X, y, test_size=0.2, random_state=42
+                )
 
-            # Scale features
-            scaler = StandardScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
+                # Scale features
+                scaler = StandardScaler()
+                X_train_scaled = scaler.fit_transform(X_train)
+                X_test_scaled = scaler.transform(X_test)
 
-            # # Polynomial features
-            # poly = PolynomialFeatures(degree=2)
-            # X_train_poly = poly.fit_transform(X_train_scaled)
-            # X_test_poly = poly.transform(X_test_scaled)
+                # # Polynomial features
+                # poly = PolynomialFeatures(degree=2)
+                # X_train_poly = poly.fit_transform(X_train_scaled)
+                # X_test_poly = poly.transform(X_test_scaled)
 
-            # Train models
-            models = {
-                "linear": LinearRegression(),
-                # "ridge": Ridge(alpha=1.0),
-                # "polynomial": LinearRegression(),
-                "arimaxgb": ARIMAXGBoost(),
-            }
-
-            # Fit models
-            models["linear"].fit(X_train, y_train)
-            # models["ridge"].fit(X_train_scaled, y_train)
-            # models["polynomial"].fit(X_train_poly, y_train)
-            models["arimaxgb"].fit(X_train, y_train)
-
-            # Cache the trained models
-            self._save_model_cache(predictor, models)
-            print(f"Retrained and cached model for {predictor}")
-
-            result = {}
-            for name, model in models.items():
-
-                if name == "linear":
-                    y_pred = model.predict(X_test)
-                    # 1 - (1 - model.score(X_test, y_test))
-                # elif name == "ridge":
-                #     y_pred = model.predict(scaler.transform(X_test))
-                #     # 1 - (1 - model.score(X_test_scaled, y_test))
-                # elif name == "polynomial":
-                #     y_pred = model.predict(poly.transform(scaler.transform(X_test)))
-                #     # 1 - (1 - model.score(X_test_poly, y_test))
-                elif name == "arimaxgb":
-                    y_pred = model.predict(X_test)
-
-                # Compute adjusted R^2  # original one r2_score(y_test, y_pred)
-                r2 = r2_score(y_true=y_test, y_pred=y_pred)
-                adj_r2 = 1 - (1 - r2_score(y_true=y_test, y_pred=y_pred)) * (
-                    X_test.shape[0] - 1
-                ) / (X_test.shape[0] - X_test.shape[1] - 1)
-
-                # Compute metrics
-                rmse = root_mean_squared_error(y_test, y_pred)
-                result[name] = {"rmse": rmse, "r2": r2}
-
-                print(f"{predictor} - {name.capitalize()} Model:")
-                print(f"  Test Mean Squared Error: {rmse:.4f}")
-                print(f"  R² Score: {r2:.4f}")
-                if "arimaxgb" in result:
-                    if result["arimaxgb"]["r2"] != max(
-                        [result[model]["r2"] for model in result]
-                    ):
-                        if predictor == "Close" and (result["arimaxgb"]["r2"] < 0.8):
-                            raise ValueError(
-                                "ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters."
-                            )
-            print(
-                "-" * 50,
-            )
-
-            # Store models, scalers, and transformers
-            self.models[predictor] = models
-            self.scalers[predictor] = scaler
-            # self.transformers[predictor] = poly
-
-            if refit is True:
-                # Refit models on full data
-                refit_models = {
+                # Train models
+                models = {
                     "linear": LinearRegression(),
                     # "ridge": Ridge(alpha=1.0),
-                    # "polynomial": LinearRegression(),  # Ridge(alpha=1.0),
+                    # "polynomial": LinearRegression(),
                     "arimaxgb": ARIMAXGBoost(),
                 }
-                refit_models["linear"].fit(X, y)
-                # refit_models["ridge"].fit(scaler.transform(X), y)
-                # refit_models["polynomial"].fit(poly.transform(scaler.transform(X)), y)
-                refit_models["arimaxgb"].fit(X, y)
-                self.models[predictor] = refit_models
+
+                # Fit models
+                models["linear"].fit(X_train, y_train)
+                # models["ridge"].fit(X_train_scaled, y_train)
+                # models["polynomial"].fit(X_train_poly, y_train)
+                models["arimaxgb"].fit(X_train, y_train)
 
                 # Cache the trained models
-                self._save_model_cache(predictor, refit_models)
-                print(f"Retrained and cached refitted model for {predictor}")
-            
+                self._save_model_cache(predictor, models)
+                print(f"Retrained and cached model for {predictor}")
+                
+
+                result = {}
+                for name, model in models.items():
+
+                    if name == "linear":
+                        y_pred = model.predict(X_test)
+                        # 1 - (1 - model.score(X_test, y_test))
+                    # elif name == "ridge":
+                    #     y_pred = model.predict(scaler.transform(X_test))
+                    #     # 1 - (1 - model.score(X_test_scaled, y_test))
+                    # elif name == "polynomial":
+                    #     y_pred = model.predict(poly.transform(scaler.transform(X_test)))
+                    #     # 1 - (1 - model.score(X_test_poly, y_test))
+                    elif name == "arimaxgb":
+                        y_pred = model.predict(X_test)
+
+                    # Compute adjusted R^2  # original one r2_score(y_test, y_pred)
+                    r2 = r2_score(y_true=y_test, y_pred=y_pred)
+                    adj_r2 = 1 - (1 - r2_score(y_true=y_test, y_pred=y_pred)) * (
+                        X_test.shape[0] - 1
+                    ) / (X_test.shape[0] - X_test.shape[1] - 1)
+
+                    # Compute metrics
+                    rmse = root_mean_squared_error(y_test, y_pred)
+                    result[name] = {"rmse": rmse, "r2": r2}
+
+                    print(f"{predictor} - {name.capitalize()} Model:")
+                    print(f"  Test Mean Squared Error: {rmse:.4f}")
+                    print(f"  R² Score: {r2:.4f}")
+                    if "arimaxgb" in result:
+                        if result["arimaxgb"]["r2"] != max(
+                            [result[model]["r2"] for model in result]
+                        ):
+                            if predictor == "Close" and (result["arimaxgb"]["r2"] < 0.8):
+                                raise ValueError(
+                                    "ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters."
+                                )
+                print(
+                    "-" * 50,
+                )
+
+                # Store models, scalers, and transformers
+                self.models[predictor] = models
+                self.scalers[predictor] = scaler
+                # self.transformers[predictor] = poly
+
+                if refit is True:
+                    # Refit models on full data
+                    refit_models = {
+                        "linear": LinearRegression(),
+                        # "ridge": Ridge(alpha=1.0),
+                        # "polynomial": LinearRegression(),  # Ridge(alpha=1.0),
+                        "arimaxgb": ARIMAXGBoost(),
+                    }
+                    refit_models["linear"].fit(X, y)
+                    # refit_models["ridge"].fit(scaler.transform(X), y)
+                    # refit_models["polynomial"].fit(poly.transform(scaler.transform(X)), y)
+                    refit_models["arimaxgb"].fit(X, y)
+                    self.models[predictor] = refit_models
+
+                    # Cache the trained models
+                    self._save_model_cache(predictor, refit_models)
+              
+           
+                    current_hash = self._get_data_hash()
+                    
+                    with open(f"{self.model_cache_dir}/{predictor}.hash", "w", encoding='utf-8') as f:
+                        f.write(current_hash)
+                    
 
     def one_step_forward_forecast(self, predictors: list[str], model_type, horizon):
         """
@@ -1332,15 +1586,15 @@ class StockPredictor:
             Forecasted data and backtest data
         """
         
-        cached_final_prediction = self._load_cached_result(model_type=model_type,horizon=horizon,output_type="forecast")
-        cached_final_backtest = self._load_cached_result(model_type=model_type,horizon=horizon, output_type="backtest")
-        cached_final_raw_prediction = self._load_cached_result(model_type=model_type,horizon=horizon,output_type="raw_forecast")
-        cached_final_raw_backtest = self._load_cached_result(model_type=model_type,horizon=horizon,output_type="raw_backtest")
+        # cached_final_prediction = self._load_cached_result(model_type=model_type,horizon=horizon,output_type="forecast")
+        # cached_final_backtest = self._load_cached_result(model_type=model_type,horizon=horizon, output_type="backtest")
+        # cached_final_raw_prediction = self._load_cached_result(model_type=model_type,horizon=horizon,output_type="raw_forecast")
+        # cached_final_raw_backtest = self._load_cached_result(model_type=model_type,horizon=horizon,output_type="raw_backtest")
 
-        # if cached_model and not needs_retrain:
-        if cached_final_prediction is not None:
-            print(f"Using cached forecasts and backtests for {self.symbol}")
-            return cached_final_prediction, cached_final_backtest, cached_final_raw_prediction, cached_final_raw_backtest   
+        # # if cached_model and not needs_retrain: 
+        # if self._model_needs_retraining() is False:
+        #     print(f"Using cached forecasts and backtests for {self.symbol}")
+        #     return cached_final_prediction, cached_final_backtest, cached_final_raw_prediction, cached_final_raw_backtest   
 
         # Ensure models are prepared
         if not self.models:

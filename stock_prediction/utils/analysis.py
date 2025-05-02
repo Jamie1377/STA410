@@ -1,5 +1,3 @@
-# from stock_prediction.utils import seed_everything
-# seed_everything(42)
 import pandas as pd
 import numpy as np
 from statsmodels.tsa.stattools import adfuller, acf, pacf
@@ -8,15 +6,13 @@ from sklearn.ensemble import RandomForestRegressor
 from typing import Tuple
 import matplotlib.pyplot as plt
 import seaborn as sns
-
-
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score, train_test_split
 from sklearn.metrics import root_mean_squared_error
 from sklearn.preprocessing import StandardScaler
 Scaler = StandardScaler()
 
 
-def optimize_lookback(X, y, model, min_window=50, max_window=None, step_size=20, n_splits=5):
+def optimize_lookback(X, y, model, min_window=50, max_window=None, step_size=20, n_splits=5, metrics='rmse', cross_val = False):
     """
     Dynamically finds the optimal lookback window using walk-forward validation
     
@@ -56,20 +52,42 @@ def optimize_lookback(X, y, model, min_window=50, max_window=None, step_size=20,
         #         1 - (np.sum((y_test - preds) ** 2) / np.sum((y_test - np.mean(y_test)) ** 2))
         #     )  # R^2 = 1 - (SS_res / SS_tot)
 
-        
-        X_train, X_test, y_train, y_test = train_test_split(
-                X.iloc[-window:,], y.iloc[-window:,], test_size=0.2, random_state=42
-            )
-        scaler = StandardScaler()
-        X_train_scaled = scaler.fit_transform(X_train)
-        X_test_scaled = scaler.transform(X_test)
-        model.fit(X_train_scaled, y_train)
-        preds = model.predict(X_test_scaled)
-        scores.append(root_mean_squared_error(y_test, preds))
-        # hand compute r2 score
-        r2.append(  
-            1 - (np.sum((y_test - preds) ** 2) / np.sum((y_test - np.mean(y_test)) ** 2))
-        )   
+        if not cross_val:
+            X_train, X_test, y_train, y_test = train_test_split(
+                    X.iloc[-window:,], y.iloc[-window:,], test_size=0.2, random_state=42
+                )
+            scaler = StandardScaler()
+            X_train_scaled = scaler.fit_transform(X_train)
+            X_test_scaled = scaler.transform(X_test)
+            model.fit(X_train_scaled, y_train)
+            preds = model.predict(X_test_scaled)
+            scores.append(root_mean_squared_error(y_test, preds))
+            # hand compute r2 score
+            r2.append(  
+                1 - (np.sum((y_test - preds) ** 2) / np.sum((y_test - np.mean(y_test)) ** 2))
+            )   
+
+        else:
+            # Cross-validation
+            tscv = TimeSeriesSplit(n_splits=n_splits, test_size=window//4)
+            for train_idx, test_idx in tscv.split(X):
+                X_train, X_test = X.iloc[train_idx[-window:]], X.iloc[test_idx]
+                y_train, y_test = y.iloc[train_idx[-window:]], y.iloc[test_idx]
+                scaler = StandardScaler()
+                X_train_scaled = scaler.fit_transform(X_train)
+                X_test_scaled = scaler.transform(X_test)
+                model.fit(X_train_scaled, y_train)
+                preds = model.predict(X_test_scaled)
+                scores.append(root_mean_squared_error(y_test, preds))
+                # hand compute r2 score 
+                r2.append(  
+                    1 - (np.sum((y_test - preds) ** 2) / np.sum((y_test - np.mean(y_test)) ** 2))
+                )
+            # avoid getting no input for scores and r2 after rerun in a notebook
+            
+                
+
+
 
 
 
@@ -85,7 +103,10 @@ def optimize_lookback(X, y, model, min_window=50, max_window=None, step_size=20,
     results_df = pd.DataFrame(results).T
     print(results_df)
     # optimal_window = results_df.loc[results_df['rmse'].idxmin(), 'window']
-    optimal_window =results_df['r2'].idxmax()
+    if metrics == 'rmse':
+        optimal_window = results_df['rmse'].idxmin()
+    elif metrics == 'r2':
+        optimal_window =results_df['r2'].idxmax()
     
     return optimal_window
 

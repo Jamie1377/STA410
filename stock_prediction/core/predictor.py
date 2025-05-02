@@ -6,6 +6,7 @@ warnings.filterwarnings('ignore')
 
 import numpy as np
 import yfinance as yf
+from pytickersymbols import PyTickerSymbols
 import pandas as pd
 from datetime import date, timedelta, datetime
 from sklearn.metrics import (
@@ -61,6 +62,7 @@ from alpaca.trading.requests import (
     StopLossRequest,
     TakeProfitRequest,
     GetOrdersRequest,
+    ClosePositionRequest
 
     
 )
@@ -282,12 +284,13 @@ class StockPredictor:
             "max_portfolio_risk": 0.05,  # 5% total portfolio risk
             "per_trade_risk": 0.01,  # 1% risk per trade
             "stop_loss_pct": 0.03,  # 3% trailing stop
-            "take_profit_pct": 0.06,  # 6% take profit
+            "take_profit_pct": 0.003,  # 1.5% take profit
             "max_sector_exposure": 0.4,  # 40% max energy sector exposure
             "daily_loss_limit": -0.03,  # -3% daily loss threshold
         }
         self.api = trading_client
         self.data_client = data_client
+        self.crypto_data_client = crypto_data_client
         self.model_cache_dir = f"model_cache/{self.symbol}"
         os.makedirs(self.model_cache_dir, exist_ok=True)
         self.data_hash = None
@@ -315,9 +318,10 @@ class StockPredictor:
         end_date = str(data_copy.index[-1].date())
         num_rows = len(data_copy)
         columns = ','.join(sorted(data_copy.columns))
-        
+
         # Create a deterministic string representation
         hash_input = f"{start_date}_{end_date}_{num_rows}_{columns}"
+
         
         # Add some data sampling to detect actual data changes
         # Sample a few values from the beginning, middle, and end of the dataset
@@ -328,6 +332,24 @@ class StockPredictor:
         
         # Generate hash
         return hashlib.sha256(hash_input.encode()).hexdigest()
+
+    
+
+    def _get_predictor_param_hash(self, params):
+        """Generate a hash of the model parameters"""
+        param_str = "_".join([f"{k}:{v}" for k, v in sorted(params.items())])
+        return hashlib.sha256(param_str.encode()).hexdigest()
+    
+
+    def _get_model_cache_key(self, predictor, horizon, other_params=None):
+        """Generate a unique cache key based on predictor, horizon and parameters"""
+        params_str = ""
+        if other_params:
+            # Sort params to ensure consistent order
+            params_str = "_" + "_".join(f"{k}_{v}" for k, v in sorted(other_params.items()))
+        
+        return f"{predictor}_{horizon}days{params_str}"
+        
 
     # def _get_data_hash(self):
     #     """Generate more stable hash of the training data"""
@@ -514,9 +536,12 @@ class StockPredictor:
     def forecast_needs_reoutput(self, horizon, output_type, model_type):
         """Check if forecast needs reoutput based on date and data hash"""
         # Check if today is a new trading day
-        if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
-            print(f"New trading day detected - reoutput {output_type}")
-            return True
+        if self.interval == "1d":
+            if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
+                print(f"New trading day detected - reoutput {output_type}")
+                return True
+
+
             
         # Calculate current data hash
         current_hash = self._get_data_hash()
@@ -613,6 +638,53 @@ class StockPredictor:
         low_close = (self.data["Low"] - self.data["Close"].shift()).abs()
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         return tr.rolling(window).mean()
+    
+    def create_hqm_stocks(start_date, end_date = None, sector = "technology"):
+        """Create a list of stocks with high momentum"""
+        technology_sector = list(yf.Sector(sector).top_companies.index)
+        stock_data = PyTickerSymbols()
+        nasdaq_tickers = stock_data.get_stocks_by_index('NASDAQ 100')  # Corrected index name
+        sp500_tickers = stock_data.get_stocks_by_index('S&P 500')
+        nasdaq_tickers_list = [stock['symbol'] for stock in nasdaq_tickers]
+        sp500_tickers_list = [stock['symbol'] for stock in sp500_tickers]
+        nasdaq_and_top_tech_tickers = list(set(nasdaq_tickers_list + technology_sector))
+
+        # sp500_tickers = stock_data2.get_stocks_by_index('S&P 500')
+        # sp500_tickers_list = [stock['symbol'] for stock in sp500_tickers]
+        # total_tickers = list(set(nasdaq_tickers_list + sp500_tickers_list))
+
+
+
+        table = yf.download(nasdaq_and_top_tech_tickers, start=start_date, end=end_date, interval="1d", group_by='tickers', auto_adjust=True, prepost=True, threads=True, proxy=None, timeout=3)
+        hqm_df = pd.DataFrame(np.zeros((len(table.columns)//5, 5)), columns=['Symbol', 'Diff_21', 'Diff_42', 'Diff_63', 'HQM_Score'])
+        i = 0
+        for sym, col in (table.columns):
+            if col == 'Close':
+                diff_21 = table[sym]['Close'].iloc[-1] - table[sym]['Close'].shift(21).iloc[-1]
+                percent_diff_21 = diff_21 / table[sym]['Close'].shift(21).iloc[-1]
+
+                diff_42 = table[sym]['Close'].iloc[-1] - table[sym]['Close'].shift(42).iloc[-1]
+                percent_diff_42 = diff_42 / table[sym]['Close'].shift(42).iloc[-1]
+
+                diff_63 = table[sym]['Close'].iloc[-1] - table[sym]['Close'].shift(63).iloc[-1]
+                percent_diff_63 = diff_63 / table[sym]['Close'].shift(63).iloc[-1]
+
+                hqm_score = np.mean([percent_diff_21, percent_diff_42, percent_diff_63])
+
+                hqm_df.iloc[i, 1] = diff_21
+                hqm_df.iloc[i, 2] = diff_42
+                hqm_df.iloc[i, 3] = diff_63
+                hqm_df.iloc[i, 4] = hqm_score
+                hqm_df.iloc[i, 0] = sym
+                i += 1
+
+                
+                # print(f"{sym}: {diff_21:.2f} ({percent_diff_21})")
+        hqm_df = pd.DataFrame(hqm_df, columns=['Symbol', 'Diff_21', 'Diff_42', 'Diff_63', 'HQM_Score'])
+        hqm_df.sort_values(by='HQM_Score', ascending=False, inplace=True)
+        return hqm_df
+
+
 
     # def calculate_position_size(self):
     #     """Calculate position size using Average True Range"""
@@ -633,25 +705,26 @@ class StockPredictor:
         total_value = sum(float(p.market_value) for p in energy_positions)
         return total_value / float(self.api.get_account().equity)
 
-    def generate_trading_signal(self, predictor, symbol):
+    def generate_trading_signal(self, symbol):
         """Generate trading signal using cached models"""
-        predictor.load_data()
-        lookback = optimize_lookback(
-            predictor.data.drop(columns="Close"),
-            predictor.data["Close"],
-            model=XGBRegressor(
-                n_estimators=20,
-                max_depth=3,
-                learning_rate=0.1,
-                random_state=42,
-                n_jobs=-1,
-            ),
-            min_window=60,
-            step_size=10,
-            n_splits=5,
-        )
-        print(f"Optimal lookback window: {lookback}")
-        predictor.data = predictor.data.iloc[-lookback:]
+        self.load_data()
+        # lookback = optimize_lookback(
+        #     self.data.drop(columns="Close"),
+        #     self.data["Close"],
+        #     model=XGBRegressor(
+        #         n_estimators=20,
+        #         max_depth=3,
+        #         learning_rate=0.1,
+        #         random_state=42,
+        #         n_jobs=-1,
+        #     ),
+        #     min_window=60,
+        #     step_size=2,
+        #     n_splits=5,
+        # )
+        # print(f"Optimal lookback window: {lookback}")
+        print('Use 162 days of data')
+        self.data = self.data.iloc[-162:]
         features = [
             "Close",
             "MA_50",
@@ -698,21 +771,30 @@ class StockPredictor:
             forecast = cached_results
         else: # Regenerate model
             print(f"Regenerating model")
-            predictor.prepare_models(features, horizon=horizon)
-            forecast, _, _, _ = predictor.one_step_forward_forecast(
+            self.prepare_models(features, horizon=horizon)
+            forecast, _, _, _ = self.one_step_forward_forecast(
                 predictors=features, model_type="arimaxgb", horizon=horizon
             )
+        
+
         
       
 
         # Get latest prediction
-        predicted_price = forecast["Close"].iloc[-1]
+        predicted_price_day_1 = forecast["Close"].iloc[-horizon] 
+        predicted_price_last_day = forecast["Close"].iloc[-1]
         alpaca_symbol = symbol.replace('-','/')  # Remove the last 4 characters
-        self.forecast_record[alpaca_symbol] = predicted_price
+        self.forecast_record[alpaca_symbol] = predicted_price_last_day
         # current_price = predictor.data['Close'].iloc[-1]
-        if datetime.now().hour < 16 and datetime.now().hour > 9:
+        if datetime.now().hour < 16 and datetime.now().hour > 9 and datetime.now().minute > 30:
             current_price = (
                 yf.download(start=date.today(), tickers=symbol, interval="1m")
+                .Close.iloc[-1]
+                .values[0]
+            )
+        elif datetime.now().hour < 9 and datetime.now().hour >= 0 and datetime.now().minute < 30:
+            current_price = (
+                yf.download(start=date.today()-pd.Timedelta(days=3), tickers=symbol, interval="1m")
                 .Close.iloc[-1]
                 .values[0]
             )
@@ -727,10 +809,10 @@ class StockPredictor:
         # trade = alpaca.get_latest_trade(symbol)
         # print(f"{symbol} Live Price: ${trade.price}")
 
-        # Generate signal
-        if predicted_price > current_price * 1.01:  # 1% threshold
+        # Generate signal (Trend of the forecast)
+        if predicted_price_last_day >  predicted_price_day_1 * 1.01:  # 1% threshold
             return "BUY"
-        elif predicted_price < current_price * 0.99:
+        elif predicted_price_last_day < predicted_price_day_1 * 0.99:
             return "SELL"
         else:
             return "HOLD"
@@ -784,7 +866,7 @@ class StockPredictor:
                 if float(position.unrealized_plpc) >= profit_target:
                     signals.append(("SELL", int(position.qty), buy_target))
                 elif self.forecast_record[symbol] > current_price * 1.001:
-                    print(f"Have position for {symbol}, but want to buy.")
+                    print(f"Have position for {symbol}, but want to buy and add on.")
                     signals.append(("BUY", int(position.qty), sell_target))
 
             else:  # No open position of the symbol
@@ -822,6 +904,18 @@ class StockPredictor:
     #     """Risk-managed position sizing"""
     #     account = self.api.get_account()
     #     return float(account.buying_power) * 0.01 / self.data["Close"].iloc[-1]
+
+    def generate_reverse_hft_signals(self, symbol, profit_target=0.005):
+        """Generate reverse immediate of generation of hft signals"""
+        hft_signals = self.generate_hft_signals(symbol, profit_target)
+        reverse_signals = []
+        for signal in hft_signals:
+            if signal[0] == "BUY":
+                reverse_signals.append(("SELL", signal[1], signal[2]))
+            elif signal[0] == "SELL":
+                reverse_signals.append(("BUY", signal[1], signal[2]))
+        print(f"Generated reverse hft signals: {reverse_signals}")
+        return reverse_signals
 
     def _calculate_position_size(self):
         """Ensure minimum quantity with fractional safety"""
@@ -869,9 +963,15 @@ class StockPredictor:
 
         symbol = self.symbol
         # current_price = self.data['Close'].iloc[-1]
-        if datetime.now().hour < 16 and datetime.now().hour > 9:
+        if datetime.now().hour < 16 and datetime.now().hour > 9 and datetime.now().minute > 30:
             current_price = (
                 yf.download(start=date.today(), tickers=symbol, interval="1m")
+                .Close.iloc[-1]
+                .values[0]
+            )
+        elif datetime.now().hour < 9 and datetime.now().hour >= 0 and datetime.now().minute < 30:
+            current_price = (
+                yf.download(start=date.today()-pd.Timedelta(days=3), tickers=symbol, interval="1m")
                 .Close.iloc[-1]
                 .values[0]
             )
@@ -1073,6 +1173,7 @@ class StockPredictor:
         """Execute HFT strategy with cached models"""
         # Get signals using cached models
         signals = self.generate_hft_signals(symbol=symbol)
+        signals = signals + self.generate_reverse_hft_signals(symbol=symbol, profit_target=0.002)
         technology_sector = list(yf.Sector("technology").top_companies.index)
 
         manual_signals = []
@@ -1112,24 +1213,49 @@ class StockPredictor:
             alpaca_symbol = symbol.replace('-','/')
             print(f"Symbol for order: {alpaca_symbol}")
             if crypto == True:
-                alpaca_symbol = symbol.replace('-','/')
-                # alpaca_symbol = symbol.replace('-','/')
-                order_request = MarketOrderRequest(
-                    symbol=alpaca_symbol, #symbol
-                    qty=qty,
-                    side=OrderSide.SELL if side == "SELL" else OrderSide.BUY,
-                    limit_price=price,
-                    type=OrderType.LIMIT,
-                    time_in_force=TimeInForce.GTC,
-                    # order_class=OrderClass.SIMPLE,
-                    take_profit=TakeProfitRequest(
-                        limit_price=take_profit_price
-                    ),
-                    stop_loss=StopLossRequest(
-                        stop_price=stop_price,
-                        # limit_price=stop_limit_price,
-                    ),
-                )
+                req = CryptoLatestTradeRequest(symbol_or_symbols=alpaca_symbol)
+                possible_size = dict(dict(self.crypto_data_client.get_crypto_snapshot(req)[alpaca_symbol])['latest_trade'])['size']
+                print(f"Available counts: {possible_size}")
+                try: 
+                    alpaca_symbol = symbol.replace('-','/')
+                    # alpaca_symbol = symbol.replace('-','/')
+                    order_request = MarketOrderRequest(
+                        symbol=alpaca_symbol, #symbol
+                        qty=qty,
+                        side=OrderSide.SELL if side == "SELL" else OrderSide.BUY,
+                        limit_price=price,
+                        type=OrderType.LIMIT,
+                        time_in_force=TimeInForce.GTC,
+                        # order_class=OrderClass.SIMPLE,
+                        take_profit=TakeProfitRequest(
+                            limit_price=take_profit_price
+                        ),
+                        stop_loss=StopLossRequest(
+                            stop_price=stop_price,
+                            # limit_price=stop_limit_price,
+                        ),
+                    )
+                except Exception as e:
+                    print(f"Error in order request: {str(e)}")
+                    alpaca_symbol = symbol.replace('-','/')
+                    # alpaca_symbol = symbol.replace('-','/')
+                    order_request = MarketOrderRequest(
+                        symbol=alpaca_symbol, #symbol
+                        qty=possible_size,
+                        side=OrderSide.SELL if side == "SELL" else OrderSide.BUY,
+                        limit_price=price,
+                        type=OrderType.LIMIT,
+                        time_in_force=TimeInForce.GTC,
+                        # order_class=OrderClass.SIMPLE,
+                        take_profit=TakeProfitRequest(
+                            limit_price=take_profit_price
+                        ),
+                        stop_loss=StopLossRequest(
+                            stop_price=stop_price,
+                            # limit_price=stop_limit_price,
+                        ),
+                    )
+                    
                 
             else: # not crypto
                 order_request = MarketOrderRequest(
@@ -1209,6 +1335,120 @@ class StockPredictor:
             return True
         return False
 
+
+        # Add to your StockPredictor class in predictor.py
+    def get_entry_signal(self, symbol, current_price=None):
+            """Generate real-time entry signal with confidence scoring
+            Returns: (decision, confidence, rationale)
+            """
+            
+            # Get real-time price if available
+            if current_price is None:
+                if datetime.now().hour < 16 and datetime.now().hour > 9 and datetime.now().minute > 30:
+                    current_price = yf.download(symbol, period='1d', interval='1m')['Close'].iloc[-1]
+                    current_tech  = yf.download('XLK', period='1d', interval='1m')['Close'].iloc[-1]
+                    current_market = yf.download('^GSPC', period='1d', interval='1m')['Close'].iloc[-1]
+        
+                    
+                elif datetime.now().hour < 9 and datetime.now().hour >= 0 and datetime.now().minute < 30:
+                    current_price = yf.download(symbol, period='1d', interval='1m')['Close'].iloc[-1]
+                    current_tech  = yf.download('XLK', period='1d', interval='1m')['Close'].iloc[-1]
+                    current_market = yf.download('^GSPC', period='1d', interval='1m')['Close'].iloc[-1]
+                else:
+                    current_price = yf.download(symbol, period='1d')['Close'].iloc[-1]
+                    current_tech  = yf.download('XLK', period='1d')['Close'].iloc[-1]
+                    current_market = yf.download('^GSPC', period='1d')['Close'].iloc[-1]
+            last_row = self.data.iloc[-1]
+            second_last_row = self.data.iloc[-2]
+            open_price = self.data['Close'].rolling(10).mean().dropna().iloc[0]
+            
+            
+            # Calculate signal components
+            signals = {
+                'trend': {
+                    'value': current_price > second_last_row['MA_50'],
+                    'weight': 0.5
+                },
+                'momentum': {
+                    'value': (last_row['RSI'] < 65) and (last_row['MACD'] > 0),
+                    'weight': 0.5
+                },
+                'volume': {
+                    'value': last_row['Volume'] > self.data['Volume'].rolling(20).mean().iloc[-1],
+                    'weight': 0.5
+                },
+                'volatility': {
+                    'value': last_row['ATR'] > self.data['ATR'].rolling(14).mean().iloc[-1],
+                    'weight': 1
+                },
+                'mean_reversion': {
+                    'value': current_price < last_row['Lower_Bollinger'] + 0.2*last_row['ATR'],
+                    'weight': 0.5
+                },
+                'market_picture_increase': {
+                    'value': (second_last_row['SP500'] < current_market),
+                    'weight': 1
+                },
+                "sector_picture_increase": {
+                    'value': (second_last_row['Tech'] < current_tech),
+                    'weight': 1
+                },
+            }
+            
+            # Calculate score (0-5 scale)
+            score = sum(condition['weight'] for name, condition in signals.items() if condition['value'].all() == True)
+            print(f"Score: {score} out of 5")
+            max_score = sum(condition['weight'] for name, condition in signals.items())
+            confidence = min(100, max(0, int((score / max_score) * 100)))
+            
+            # Generate rationale
+            rationales = []
+            if signals['trend']['value'].all() == True:
+                rationales.append(f"📈 Price {current_price[0]:.2f} above 50MA ({last_row['MA_50']:.2f})")
+            else:
+                rationales.append(f"📉 Price {current_price[0]:.2f} below 50MA ({last_row['MA_50']:.2f})")
+                
+            if signals['momentum']['value'].all() == True:
+                rationales.append(f"💪 Strong momentum (RSI {last_row['RSI']:.1f}, MACD {last_row['MACD']:.2f})")
+                
+            if signals['volume']['value'].all() == True:
+                rationales.append(f"📊 Volume surge ({last_row['Volume']/1e6:.1f}M vs 20d avg)")
+                
+            # Make decision
+            # if market today is bullish, then we lower the score needed to buy and increase the score needed to sell
+            if open_price < current_price[0]:
+                decision = "BUY" if score >= 3 else "SELL" if score <= 1 else "HOLD"
+            else:
+                decision = "SELL" if score >= 3.5 else "BUY" if score <= 1.5 else "HOLD"
+            
+            # Add risk check
+            position_size = self._calculate_position_size()
+            if position_size < 1:
+                decision = "HOLD"
+                rationales.append("⚠️ Position size too small")
+            
+            return (
+                decision,
+                confidence,
+                " | ".join(rationales),
+                
+                {
+                    'current_price': current_price,
+                    'stop_loss': current_price * (1 - 2* self.risk_params['stop_loss_pct']),
+                    'take_profit': current_price * (1 + self.risk_params['take_profit_pct']),
+                }
+                if decision == "BUY" or decision == "HOLD" 
+                else {
+                    'current_price': current_price,
+                    'stop_loss': current_price * (1 + 2* self.risk_params['stop_loss_pct']),
+                    'take_profit': current_price * (1 - self.risk_params['take_profit_pct']),
+                }  
+            )
+ 
+####################################################################################################################################################################################
+
+
+
     def load_data(self):
         """Load and prepare stock data with features"""
         # Add momentum-specific features
@@ -1230,10 +1470,10 @@ class StockPredictor:
         self.data["MA_21"] = self.data["Close"].rolling(window=21).mean()
 
         ### 2. Fourier transform
-        data_FT = self.data.copy().reset_index()[["Date", "Close"]]
-        close_fft = np.fft.fft(np.asarray(data_FT["Close"].tolist()))
-        self.data["FT_real"] = np.real(close_fft)
-        self.data["FT_img"] = np.imag(close_fft)
+        # data_FT = self.data.copy().reset_index()[["Date", "Close"]]
+        # close_fft = np.fft.fft(np.asarray(data_FT["Close"].tolist()))
+        # self.data["FT_real"] = np.real(close_fft)
+        # self.data["FT_img"] = np.imag(close_fft)
 
         # # Fourier Transformation is not used
         # fft_df = pd.DataFrame({'fft': close_fft})
@@ -1247,12 +1487,12 @@ class StockPredictor:
         #     self.data[f'Fourier_trans_{num_}_comp_real'] = np.real(complex_num)
         #     self.data[f'Fourier_trans_{num_}_comp_img'] = np.imag(complex_num)
 
-        ### Fourier Transformation PCA
-        X_fft = np.column_stack([np.real(close_fft), np.imag(close_fft)])
-        pca = PCA(n_components=2)  # Keep top 2 components
-        X_pca = pca.fit_transform(X_fft)
-        for i in range(X_pca.shape[1]):
-            self.data[f"Fourier_PCA_{i}"] = X_pca[:, i]
+        # ### Fourier Transformation PCA
+        # X_fft = np.column_stack([np.real(close_fft), np.imag(close_fft)])
+        # pca = PCA(n_components=2)  # Keep top 2 components
+        # X_pca = pca.fit_transform(X_fft)
+        # for i in range(X_pca.shape[1]):
+        #     self.data[f"Fourier_PCA_{i}"] = X_pca[:, i]
 
         ### 3. Add rolling statistics
         self.data["rolling_std"] = self.data["Close"].rolling(window=50).std()
@@ -1314,12 +1554,13 @@ class StockPredictor:
         ).cumsum() / self.data["Volume"].cumsum()
 
         ### 10. Economic Indicators
-        sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date)["Close"]
+        sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date, interval=self.interval,)["Close"]
         # Fetch S&P 500 Index (GSPC) and Treasury Yield ETF (IEF) from Yahoo Finance
         sp500 = sp500 - sp500.mean()
         tnx = yf.download(
             "^TNX", start=self.start_date, end=self.end_date, interval=self.interval
         )["Close"]
+        tnx_len = len(tnx)
         treasury_yield = yf.download(
             "IEF", start=self.start_date, end=self.end_date, interval=self.interval
         )["Close"]
@@ -1377,8 +1618,14 @@ class StockPredictor:
             # .dropna()
         )
         economic_data.columns = economic_data.columns.get_level_values(0)
-        economic_data["Date"] = pd.to_datetime(economic_data["Date"])
-        economic_data.set_index("Date", inplace=True)
+        if self.interval == "1m":
+
+            economic_data["Datetime"] = pd.to_datetime(economic_data["Datetime"])
+            economic_data.set_index("Datetime", inplace=True)
+        else:
+            economic_data["Date"] = pd.to_datetime(economic_data["Date"])
+            economic_data.set_index("Date", inplace=True)
+        
         # Issue of Yfinance API of USDCAD=X
         # Fill missing values with the mean
         economic_data["USDCAD=X"] = economic_data["USDCAD=X"].fillna(
@@ -1386,20 +1633,25 @@ class StockPredictor:
         )
 
         # 11. Whether the next or previous day is a non-trading day
-        nyse = mcal.get_calendar("NYSE")
-        schedule = nyse.schedule(start_date=self.start_date, end_date=self.end_date)
-        economic_data["is_next_non_trading_day"] = economic_data.index.shift(
-            -1, freq="1d"
-        ).isin(schedule.index).astype(int) + economic_data.index.shift(
-            1, freq="1d"
-        ).isin(
-            schedule.index
-        ).astype(
-            int
-        )
+        # nyse = mcal.get_calendar("NYSE")
+        # schedule = nyse.schedule(start_date=self.start_date, end_date=self.end_date)
+        # economic_data["is_next_non_trading_day"] = economic_data.index.shift(
+        #     -1, freq="1d"
+        # ).isin(schedule.index).astype(int) + economic_data.index.shift(
+        #     1, freq="1d"
+        # ).isin(
+        #     schedule.index
+        # ).astype(
+        #     int
+        # )
 
         # Merge with stock data
-        self.data = pd.merge(self.data, economic_data, on="Date", how="left")
+        if tnx_len != len(self.data):
+            economic_data = economic_data.drop(columns='TNX')
+        if self.interval == "1m":
+            self.data = pd.merge(self.data, economic_data, on="Datetime", how="left")
+        else:
+            self.data = pd.merge(self.data, economic_data, on="Date", how="left")
 
         ### 12. Volatility and Momentum
         # self.data["Daily Returns"] = self.data["Close"].pct_change() # Percentage change
@@ -1460,6 +1712,9 @@ class StockPredictor:
         # self.data["Market_Sentiment"] = sentimement
 
         # Final cleaning
+        # convert timezone to AMErican/New_York
+        if self.interval == "1m":
+            self.data.index = self.data.index.tz_convert("America/New_York")
         self.data = self.data.dropna()
         if len(self.data) < 50:
             print("Not enough data to train the model.")
@@ -1571,14 +1826,18 @@ class StockPredictor:
                     print(f"{predictor} - {name.capitalize()} Model:")
                     print(f"  Test Mean Squared Error: {rmse:.4f}")
                     print(f"  R² Score: {r2:.4f}")
-                    if "arimaxgb" in result:
-                        if result["arimaxgb"]["r2"] != max(
-                            [result[model]["r2"] for model in result]
-                        ):
-                            if predictor == "Close" and (result["arimaxgb"]["r2"] < 0.8):
-                                raise ValueError(
-                                    "ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters."
-                                )
+                    # if "arimaxgb" in result:
+                    #     if result["arimaxgb"]["r2"] != max(
+                    #         [result[model]["r2"] for model in result]
+                    #     ):
+                    #         if predictor == "Close" and (result["arimaxgb"]["r2"] < 0.8):
+                    #             os.remove(
+                    #                 f"{self.model_cache_dir}/{predictor}.pkl"
+                    #             )
+                    #             raise ValueError(
+                    #                 "ARIMAXGBoost model failed to converge (r2 < 0.8). Please check your data period or model parameters."
+                    #             )
+                                
                 print(
                     "-" * 50,
                 )
@@ -1839,8 +2098,12 @@ class StockPredictor:
                 last_backtest_date = backtest_dates[-1]
 
             # Calculate next dates
-            next_pred_date = get_next_valid_date(pd.Timestamp(last_pred_date))
-            next_backtest_date = get_next_valid_date(pd.Timestamp(last_backtest_date))
+            if self.interval == "1m":
+                next_pred_date = last_pred_date + pd.Timedelta(minutes=1)
+                next_backtest_date = last_backtest_date + pd.Timedelta(minutes=1)
+            else:
+                next_pred_date = get_next_valid_date(pd.Timestamp(last_pred_date))
+                next_backtest_date = get_next_valid_date(pd.Timestamp(last_backtest_date))
             pred_dates.append(next_pred_date)
             backtest_dates.append(next_backtest_date)
 

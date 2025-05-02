@@ -32,6 +32,10 @@ from statsforecast.utils import AirPassengersDF
 import warnings
 from scipy.optimize import OptimizeWarning
 
+from matplotlib import pyplot as plt
+from mpl_toolkits.mplot3d import Axes3D
+
+
 # Custom Gradient Descent Implementations
 class GradientDescentRegressor(BaseEstimator, RegressorMixin):
     """Custom GD implementation with momentum and adaptive learning
@@ -411,7 +415,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
 
             # Combined loss (prioritize both accuracy and error)
             return (
-                0.7 * rmse + 0.3 * mape - 0.2 * dir_acc - 0.1 * volatility + 30 * first_prediction_deviation + 30 * mean_pred_deviations 
+                0.7 * rmse + 0.3 * mape - 0.2 * dir_acc - 0.1 * volatility + 30 * first_prediction_deviation + 10 * mean_pred_deviations 
             )  
         # Rationale: if accuracy is high, the loss is low, and vice versa. In other words, if the model's directions are not accurate, the loss is high so it is penalized
         #  Volatility is encouraged to be high so that the model can be more flexible and adaptive to the market changes. The model is penalized if it is too conservative and not adaptive to the market changes.
@@ -606,6 +610,17 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
             print(
                 f"residuals mean: {np.sum(residuals)/len(residuals)}, stock price mean {np.mean(y)}"
             )  # residuals mean (by day) on natural scale
+
+         # Collect gradient histories
+        # self.gd_loss = self.gd_model.loss_history
+        # self.sgd_loss = self.sgd_model.loss_history
+        # self.gd_grad_norms = [np.linalg.norm(g) 
+        #                     for g in self.gd_model.gradients_gd]
+        # self.sgd_grad_norms = [np.linalg.norm(g) 
+        #                      for g in self.sgd_model.gradients_sgd]
+
+        
+                
 
     def predict(self, X):
         """

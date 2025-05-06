@@ -6,6 +6,7 @@ warnings.filterwarnings('ignore')
 
 import numpy as np
 import yfinance as yf
+
 from pytickersymbols import PyTickerSymbols
 import pandas as pd
 from datetime import date, timedelta, datetime
@@ -15,7 +16,7 @@ from sklearn.metrics import (
     r2_score,
 )
 from sklearn.preprocessing import StandardScaler, PolynomialFeatures
-from sklearn.linear_model import LinearRegression, Ridge
+from sklearn.linear_model import LinearRegression
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 import pandas_market_calendars as mcal
@@ -39,7 +40,6 @@ import pandas as pd
 from datetime import timedelta
 import hashlib
 import joblib
-import pickle
 
 # API imports
 api_key = "PK8Z3VDFBGIPX2O8MN0R"
@@ -81,114 +81,6 @@ from alpaca.data.requests import StockLatestTradeRequest, CryptoLatestTradeReque
 data_client = StockHistoricalDataClient(api_key='PK8Z3VDFBGIPX2O8MN0R', secret_key='Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE')
 crypto_data_client = CryptoHistoricalDataClient(api_key='PK8Z3VDFBGIPX2O8MN0R', secret_key='Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE')
 trading_client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
-# api = tradeapi.REST(
-#     key_id='PKR0BKC0QMVXGC6WUYZB',
-#     secret_key='nIonxysbSHIIC77ojMjiQPgCrug78echi1IcZMe8',
-#     base_url='https://paper-api.alpaca.markets/v2'  # Paper trading endpoint
-# )
-
-# def generate_trading_signal(predictor, symbol):
-#     predictor.load_data()
-#     lookback = optimize_lookback(
-#         predictor.data.drop(columns="Close"),
-#         predictor.data["Close"],
-#         model=XGBRegressor(
-#             n_estimators=20,
-#             max_depth=3,
-#             learning_rate=0.1,
-#             random_state=42,
-#             n_jobs=-1,
-#         ),
-#         min_window=60,
-#         step_size=10,
-#         n_splits=5,
-#     )
-#     print(f"Optimal lookback window: {lookback}")
-#     predictor.data = predictor.data.iloc[-lookback:]
-#     features = [
-#         # "Market_State",
-#         "Close",
-#         "MA_50",
-#         # "MA_200",
-#         # "High",
-#         # "Low",
-#         "MA_7",
-#         # "MA_21",
-#         "SP500",
-#         "TNX",
-#         "USDCAD=X",
-#         # "Tech",
-#         # "Fin",
-#         "VIX",
-#         "Energy",
-#     ]
-#     + [
-#         "rolling_min",
-#         "rolling_median",
-#         "rolling_sum",
-#         "rolling_ema",
-#         "rolling_25p",
-#         "rolling_75p",
-#     ]
-#     + ["RSI", "MACD", "ATR", "Upper_Bollinger", "Lower_Bollinger"]
-#     + ["VWAP"]
-#     + [  # "Volatility",
-#         "Daily Returns",
-#         "Williams_%R",
-#         "Momentum_Interaction",
-#         # "Volatility_Adj_Momentum",
-#         "Stochastic_%K",
-#         "Stochastic_%D",
-#         "Momentum_Score",
-#     ] # Use same features as in notebook
-#     horizon = 5  # Prediction window
-
-#     predictor.prepare_models(features, horizon=horizon)
-#     forecast, _, _, _ = predictor.one_step_forward_forecast(
-#         predictors=features,
-#         model_type="arimaxgb",
-#         horizon=horizon
-#     )
-
-#     # Get latest prediction
-#     predicted_price = forecast['Close'].iloc[-1]
-#     current_price = predictor.data['Close'].iloc[-1]
-
-#     # Generate signal
-#     if predicted_price > current_price * 1.01:  # 1% threshold
-#         return 'BUY'
-#     elif predicted_price < current_price * 0.99:
-#         return 'SELL'
-#     else:
-#         return 'HOLD'
-
-# def execute_trade(symbol, signal, api):
-#     position = api.get_position(symbol)
-#     cash = api.get_account().cash
-#     current_price = api.get_last_trade(symbol).price
-#     # In execute_trade()
-#     max_risk_per_trade = 0.02  # 2% of portfolio
-#     portfolio_value = float(api.get_account().equity)
-#     max_loss = portfolio_value * max_risk_per_trade
-
-#     if signal == 'BUY' and not position:
-#         # Risk management: don't use more than 20% of cash
-#         max_qty = (float(cash) * 0.2) // current_price
-#         api.submit_order(
-#             symbol=symbol,
-#             qty=max_qty,
-#             side='buy',
-#             type='market',
-#             time_in_force='day'
-#         )
-#     elif signal == 'SELL' and position:
-#         api.submit_order(
-#             symbol=symbol,
-#             qty=position.qty,
-#             side='sell',
-#             type='market',
-#             time_in_force='day'
-#         )
 
 
 class MarketSentimentAnalyzer:  # Compuationally expensive, try to use volatility to replace the sentiment
@@ -282,7 +174,7 @@ class StockPredictor:
         self.history = []  # New attribute for error correction
         self.risk_params = {
             "max_portfolio_risk": 0.05,  # 5% total portfolio risk
-            "per_trade_risk": 0.01,  # 1% risk per trade
+            "per_trade_risk": 0.025,  # 2.5% risk per trade
             "stop_loss_pct": 0.03,  # 3% trailing stop
             "take_profit_pct": 0.003,  # 1.5% take profit
             "max_sector_exposure": 0.4,  # 40% max energy sector exposure
@@ -298,12 +190,8 @@ class StockPredictor:
 
 
 ################################################################################
-    
-    # def _get_data_hash(self):
-    #     """Generate unique hash of the training data"""
-    #     hash_series = pd.util.hash_pandas_object(self.data, index=True)
-    #     hash_bytes = hash_series.values.tobytes()
-    #     return hashlib.sha256(hash_bytes).hexdigest()
+
+
     def _get_data_hash(self):
         """Generate a stable hash of the training data"""
         # Create a more deterministic representation of the data
@@ -321,7 +209,6 @@ class StockPredictor:
 
         # Create a deterministic string representation
         hash_input = f"{start_date}_{end_date}_{num_rows}_{columns}"
-
         
         # Add some data sampling to detect actual data changes
         # Sample a few values from the beginning, middle, and end of the dataset
@@ -334,7 +221,6 @@ class StockPredictor:
         return hashlib.sha256(hash_input.encode()).hexdigest()
 
     
-
     def _get_predictor_param_hash(self, params):
         """Generate a hash of the model parameters"""
         param_str = "_".join([f"{k}:{v}" for k, v in sorted(params.items())])
@@ -351,23 +237,6 @@ class StockPredictor:
         return f"{predictor}_{horizon}days{params_str}"
         
 
-    # def _get_data_hash(self):
-    #     """Generate more stable hash of the training data"""
-    #     # Round numeric values to reduce floating point variation
-    #     numeric_cols = self.data.select_dtypes(include=['number']).columns
-    #     data_copy = self.data.copy()
-        
-    #     # Round numeric columns to a fixed precision
-    #     for col in numeric_cols:
-    #         data_copy[col] = data_copy[col].round(6)
-        
-    #     # Include only the key information in the hash
-    #     # Consider using only the raw price data and dates, not derived features
-    #     # hash_series = pd.util.hash_pandas_object(data_copy[['Close', 'Open', 'High', 'Low']], index=True)
-    #     hash_series = pd.util.hash_pandas_object(data_copy, index=True)
-    #     hash_bytes = hash_series.values.tobytes()
-    #     return hashlib.sha256(hash_bytes).hexdigest()
-
     def _get_forecast_hash(self, forecast):
         """Generate unique hash of the forecast data"""
         # Round numeric values to reduce floating point variation
@@ -376,6 +245,7 @@ class StockPredictor:
         hash_series = pd.util.hash_pandas_object(forecast_copy, index=True)
         hash_bytes = hash_series.values.tobytes()
         return hashlib.sha256(hash_bytes).hexdigest()
+
 
     def _load_cached_model(self, predictor):
         cache_path = f"{self.model_cache_dir}/{predictor}.pkl"
@@ -392,6 +262,7 @@ class StockPredictor:
                 os.remove(cache_path)
             return None
 
+
     def _save_model_cache(self, predictor, model):
         cache_path = f"{self.model_cache_dir}/{predictor}.pkl"
         hash_file = f"{self.model_cache_dir}/{predictor}.hash"
@@ -399,70 +270,15 @@ class StockPredictor:
         current_hash = self._get_data_hash()
         with open(hash_file, "w", encoding='utf-8') as f:
             f.write(current_hash)
-        # joblib.dump(current_hash, hash_file)
 
-        
-
-        
-       
-
-
-    # def _load_cached_result(self, model_type, horizon, output_type):
-    #     cache_path = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
-    #     try:
-    #         if os.path.exists(cache_path) and os.path.getsize(cache_path) > 100:  # At least 100 bytes
-    #             return joblib.load(cache_path)
-    #         else:
-    #             print(f"Invalid cache result {cache_path} - regenerating")
-    #             os.remove(cache_path)  # Clean up invalid cache
-    #             return None
-    #     except Exception as e:
-    #         print(f"Cache load failed: {str(e)} - regenerating results") # HE START OF REGENERATING (KEY PART)
-    #         if os.path.exists(cache_path):
-    #             os.remove(cache_path)
-    #         return None
-
-
-    
-    # def _save_result(self, model_type, forecast, horizon, output_type):
-    #     """Save the forecast result to a cache file"""
-    
-    #     cache_path = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
-    #     joblib.dump(forecast, cache_path)
-    #     current_hash = self._get_data_hash()
-    #     with open(f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.hash", "w") as f:
-    #         f.write(current_hash)
-
-
-    
-    
-
-    # def _model_needs_retraining(self, predictor):
-    #     if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
-    #         return True
-    #     current_hash = self._get_data_hash()
-    #     hash_file = f"{self.model_cache_dir}/{predictor}.hash"
-
-    #     # If there is no hash file, create one
-    #     if not os.path.exists(hash_file):
-    #         return True
-
-    #     with open(hash_file, "r") as f:
-    #         saved_hash = f.read()
-    #     # Need to check if the data is updated
-    #     if current_hash != saved_hash:
-    #         with open(hash_file, "w") as f:
-    #             f.write(current_hash)
-    #         return True
-    #     return False
 
     def _model_needs_retraining(self, predictor, crypto=True):
         """Check if model needs retraining based on date and data hash"""
         # Check if today is a new trading day
-        if  crypto == False:
-            if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
-                print(f"New trading day detected - retraining {predictor}")
-                return True
+        # if  crypto == False:
+        #     if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
+        #         print(f"New trading day detected - retraining {predictor}")
+        #         return True
             
         # Calculate current data hash
         current_hash = self._get_data_hash()
@@ -510,7 +326,10 @@ class StockPredictor:
             os.remove(cache_path)
         return None
 
+
 ###############################################################################################
+   
+   
     # Results
     def _save_result(self, model_type, forecast, horizon, output_type):
         """Save the forecast result to a cache file"""
@@ -519,6 +338,8 @@ class StockPredictor:
         
         # Save the forecast
         joblib.dump(forecast, cache_path)
+   
+
         
         # Update the hash file
         current_hash = self._get_data_hash()
@@ -528,21 +349,18 @@ class StockPredictor:
         with open(hash_file, "w", encoding='utf-8') as f:
             # joblib.dump(current_hash, f)
             f.write(current_hash)
-
-        
-        
         print(f"Saved forecast for {horizon}days_{output_type}_{model_type}")
+
 
     def forecast_needs_reoutput(self, horizon, output_type, model_type):
         """Check if forecast needs reoutput based on date and data hash"""
         # Check if today is a new trading day
-        if self.interval == "1d":
-            if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
-                print(f"New trading day detected - reoutput {output_type}")
-                return True
 
+        # if self.interval == "1d":
+        #     if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
+        #         print(f"New trading day detected - reoutput {output_type}")
+        #         return True
 
-            
         # Calculate current data hash
         current_hash = self._get_data_hash()
         hash_file = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.hash"  # Fixed extension
@@ -559,67 +377,14 @@ class StockPredictor:
                 # saved_hash = joblib.load(f)  # rb
         except Exception as e:
             print(f"Hash load failed: {str(e)}")
-           
         
         if current_hash not in saved_hash:
             print(f"Data has changed - reoutput {output_type}")
             return True
             
         return False
-    
 
-
-    
-
-
-
-    # def forecast_needs_reoutput(self, forecast, horizon, output_type, model_type):
-    #     """Check if the forecast needs to be re-output"""
-    #     current_hash = self._get_forecast_hash(forecast)
-    #     hash_file = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
-
-    #     # If there is no hash file, create one
-    #     if not os.path.exists(hash_file):
-    #         return True
-
-    #     with open(hash_file, "r") as f:
-    #         saved_hash = f.read()
-    #     # Need to check if the data is updated
-    #     if current_hash != saved_hash:
-    #         with open(hash_file, "w") as f:
-    #             f.write(current_hash)
-    #         return True
-    #     return False
-    # def forecast_needs_reoutput(self, forecast, horizon, output_type, model_type):
-    #     """Check if forecast needs reoutput based on date and data hash"""
-    #     # Check if today is a new trading day
-    #     if get_next_valid_date(self.data.index[-1]) != pd.Timestamp(date.today()):
-    #         print(f"New trading day detected - reoutput {output_type}")
-    #         return True
-            
-    #     # Calculate current data hash
-    #     current_hash = self._get_data_hash()
-    #     hash_file = f"{self.model_cache_dir}/{horizon}days_{output_type}_{model_type}.pkl"
-
-    #     # If hash file doesn't exist, create it and retrain
-    #     if not os.path.exists(hash_file):
-    #         with open(hash_file, "w") as f:
-    #             f.write(current_hash)
-    #         print(f"No previous hash found - reoutput {output_type}")
-    #         return True
-        
-    #     # Compare current hash with saved hash
-    #     with open(hash_file, "r") as f:
-    #         saved_hash = f.read().strip()  # Added strip() to remove whitespace
-        
-    #     if current_hash != saved_hash:
-    #         print(f"Data has changed - reoutput {output_type}")
-    #         # Only update hash file AFTER successful training, not here
-    #         return True
-            
-    #     print(f"No changes detected - using cached output for {output_type}")
-    #     return False
-
+################################################################################# Utility functions
 
 
     def _compute_rsi(self, window=14):
@@ -631,6 +396,7 @@ class StockPredictor:
             100 / (1 + (gain.rolling(window).mean() / loss.rolling(window).mean()))
         )
 
+
     def _compute_atr(self, window=14):
         """Average True Range"""
         high_low = self.data["High"] - self.data["Low"]
@@ -639,8 +405,14 @@ class StockPredictor:
         tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
         return tr.rolling(window).mean()
     
+
     def create_hqm_stocks(start_date, end_date = None, sector = "technology"):
-        """Create a list of stocks with high momentum"""
+        """Create a list of stocks with high momentum
+        Args:
+            start_date (str): Start date for data
+            end_date (str): End date for data
+            sector (str): Sector to filter stocks
+        """
         technology_sector = list(yf.Sector(sector).top_companies.index)
         stock_data = PyTickerSymbols()
         nasdaq_tickers = stock_data.get_stocks_by_index('NASDAQ 100')  # Corrected index name
@@ -648,13 +420,6 @@ class StockPredictor:
         nasdaq_tickers_list = [stock['symbol'] for stock in nasdaq_tickers]
         sp500_tickers_list = [stock['symbol'] for stock in sp500_tickers]
         nasdaq_and_top_tech_tickers = list(set(nasdaq_tickers_list + technology_sector))
-
-        # sp500_tickers = stock_data2.get_stocks_by_index('S&P 500')
-        # sp500_tickers_list = [stock['symbol'] for stock in sp500_tickers]
-        # total_tickers = list(set(nasdaq_tickers_list + sp500_tickers_list))
-
-
-
         table = yf.download(nasdaq_and_top_tech_tickers, start=start_date, end=end_date, interval="1d", group_by='tickers', auto_adjust=True, prepost=True, threads=True, proxy=None, timeout=3)
         hqm_df = pd.DataFrame(np.zeros((len(table.columns)//5, 5)), columns=['Symbol', 'Diff_21', 'Diff_42', 'Diff_63', 'HQM_Score'])
         i = 0
@@ -678,25 +443,10 @@ class StockPredictor:
                 hqm_df.iloc[i, 0] = sym
                 i += 1
 
-                
-                # print(f"{sym}: {diff_21:.2f} ({percent_diff_21})")
         hqm_df = pd.DataFrame(hqm_df, columns=['Symbol', 'Diff_21', 'Diff_42', 'Diff_63', 'HQM_Score'])
         hqm_df.sort_values(by='HQM_Score', ascending=False, inplace=True)
         return hqm_df
 
-
-
-    # def calculate_position_size(self):
-    #     """Calculate position size using Average True Range"""
-    #     account = self.api.get_account()
-    #     portfolio_value = float(account.equity)
-
-    #     # Risk per trade calculation
-    #     dollar_risk = portfolio_value * self.risk_params["per_trade_risk"]
-    #     volatility_risk = atr * current_price  # ATR in dollar terms
-
-    #     position_size = dollar_risk / volatility_risk
-    #     return int(position_size)
 
     def get_sector_exposure(self):
         """Calculate current energy sector exposure"""
@@ -705,26 +455,26 @@ class StockPredictor:
         total_value = sum(float(p.market_value) for p in energy_positions)
         return total_value / float(self.api.get_account().equity)
 
-    def generate_trading_signal(self, symbol):
+
+    def generate_trading_signal(self, symbol, horizon= 5):
         """Generate trading signal using cached models"""
         self.load_data()
-        # lookback = optimize_lookback(
-        #     self.data.drop(columns="Close"),
-        #     self.data["Close"],
-        #     model=XGBRegressor(
-        #         n_estimators=20,
-        #         max_depth=3,
-        #         learning_rate=0.1,
-        #         random_state=42,
-        #         n_jobs=-1,
-        #     ),
-        #     min_window=60,
-        #     step_size=2,
-        #     n_splits=5,
-        # )
-        # print(f"Optimal lookback window: {lookback}")
-        print('Use 162 days of data')
-        self.data = self.data.iloc[-162:]
+        lookback = optimize_lookback(
+            self.data.drop(columns="Close"),
+            self.data["Close"],
+            model=XGBRegressor(
+                n_estimators=20,
+                max_depth=3,
+                learning_rate=0.1,
+                random_state=42,
+                n_jobs=-1,
+            ),
+            min_window=60,
+            step_size=2,
+            n_splits=5,
+        )
+        print(f"Optimal lookback window: {lookback}")
+        self.data = self.data.iloc[-lookback:]
         features = [
             "Close",
             "MA_50",
@@ -738,11 +488,11 @@ class StockPredictor:
             "USDCAD=X",
             # "Tech",
             # "Fin",
-            "VIX",
+            # "VIX",
             "Energy",
             "rolling_min",
             "rolling_median",
-            "rolling_sum",
+            # "rolling_sum",
             "rolling_ema",
             "rolling_25p",
             "rolling_75p",
@@ -752,78 +502,49 @@ class StockPredictor:
             "Upper_Bollinger",
             "Lower_Bollinger",
             "VWAP",
-            "Volatility",
+            # "Volatility",
             "Daily Returns",
             "Williams_%R",
             "Momentum_Interaction",
-            "Stochastic_%K",
+            # "Stochastic_%K",
             "Stochastic_%D",
             "Momentum_Score",
         ]  # Use same features as in notebook
-        horizon = 5  # Prediction window
+        horizon = horizon  # Prediction window
 
-        cached_results = self._load_cached_result(model_type='arimaxgb', horizon=5, output_type='foerecast')
-        needs_reoutput = self.forecast_needs_reoutput(horizon=5, output_type='foerecast', model_type='arimaxgb')
-
+        cached_results = self._load_cached_result(model_type='arimaxgb', horizon=horizon, output_type='forecast')
+        needs_reoutput = self.forecast_needs_reoutput(horizon=horizon, output_type='forecast', model_type='arimaxgb')
+        cached_results = pd.DataFrame(cached_results)
+        print(f"Cached results tail: {cached_results.tail()}, data type: {type(cached_results)}")
         # if cached_model and not needs_retrain:
-        if cached_results and needs_reoutput is False:
+        if  len(cached_results) > 0: #and needs_reoutput is False:
             print(f"Using cached results for {symbol} prediction")
             forecast = cached_results
         else: # Regenerate model
-            print(f"Regenerating model")
+            print(f"Regenerating model for {symbol} prediction")
             self.prepare_models(features, horizon=horizon)
             forecast, _, _, _ = self.one_step_forward_forecast(
                 predictors=features, model_type="arimaxgb", horizon=horizon
             )
-        
 
-        
-      
 
         # Get latest prediction
+        
         predicted_price_day_1 = forecast["Close"].iloc[-horizon] 
         predicted_price_last_day = forecast["Close"].iloc[-1]
+    
         alpaca_symbol = symbol.replace('-','/')  # Remove the last 4 characters
         self.forecast_record[alpaca_symbol] = predicted_price_last_day
         # current_price = predictor.data['Close'].iloc[-1]
-        if datetime.now().hour < 16 and datetime.now().hour > 9 and datetime.now().minute > 30:
-            current_price = (
-                yf.download(start=date.today(), tickers=symbol, interval="1m")
-                .Close.iloc[-1]
-                .values[0]
-            )
-        elif datetime.now().hour < 9 and datetime.now().hour >= 0 and datetime.now().minute < 30:
-            current_price = (
-                yf.download(start=date.today()-pd.Timedelta(days=3), tickers=symbol, interval="1m")
-                .Close.iloc[-1]
-                .values[0]
-            )
-        else:
-            current_price = (
-                yf.download(start=date.today(), tickers=symbol, interval="1d")
-                .Close.iloc[-1]
-                .values[0]
-            )
-
-        # symbol = "AAPL"
-        # trade = alpaca.get_latest_trade(symbol)
-        # print(f"{symbol} Live Price: ${trade.price}")
-
-        # Generate signal (Trend of the forecast)
-        if predicted_price_last_day >  predicted_price_day_1 * 1.01:  # 1% threshold
-            return "BUY"
-        elif predicted_price_last_day < predicted_price_day_1 * 0.99:
-            return "SELL"
-        else:
-            return "HOLD"
-
-    def generate_hft_signals(self, symbol, profit_target=0.005):
-        """Generate immediate execution signals with tight spreads"""
-        signals = []
-        # get cached model
-        # if datetime.now().hour < 16 and datetime.now().hour > 9:
+        # if datetime.now().hour < 16 and datetime.now().hour > 9 and datetime.now().minute > 30:
         #     current_price = (
         #         yf.download(start=date.today(), tickers=symbol, interval="1m")
+        #         .Close.iloc[-1]
+        #         .values[0]
+        #     )
+        # elif datetime.now().hour < 9 and datetime.now().hour >= 0 and datetime.now().minute < 30:
+        #     current_price = (
+        #         yf.download(start=date.today()-pd.Timedelta(days=3), tickers=symbol, interval="1m")
         #         .Close.iloc[-1]
         #         .values[0]
         #     )
@@ -833,6 +554,20 @@ class StockPredictor:
         #         .Close.iloc[-1]
         #         .values[0]
         #     )
+
+        
+        # Generate signal (Trend of the forecast)
+        if predicted_price_last_day >=  predicted_price_day_1 * 1.01:  # 1% threshold
+            return "BUY"
+        elif predicted_price_last_day <= predicted_price_day_1 * 0.99:
+            return "SELL"
+        else:
+            return "HOLD"
+
+
+    def generate_hft_signals(self, symbol, profit_target=0.005):
+        """Generate immediate execution signals with tight spreads"""
+        signals = []
         alpaca_symbol = symbol.replace('-','/')  # Remove the last 4 characters
         try:
             request = StockLatestTradeRequest(symbol_or_symbols=alpaca_symbol)
@@ -841,12 +576,9 @@ class StockPredictor:
             print(f"Not Stock but Crypto")
             request = CryptoLatestTradeRequest(symbol_or_symbols=alpaca_symbol)
             latest_trade = crypto_data_client.get_crypto_latest_trade(request)
-            
-
       
         current_price = latest_trade[alpaca_symbol].price
         print(f"Current price: {current_price}")
-        
 
         # Calculate bid/ask spread
         bid_price = round(current_price * 0.99, 2)
@@ -890,20 +622,10 @@ class StockPredictor:
                     )
         except Exception:
             pass
-
-        # Add market making signals
-        # signals.extend([
-        #     ("BUY", self._calculate_position_size(), bid_price),
-        #     ("SELL", self._calculate_position_size(), ask_price)
-        # ])
         print(f"Generated hft signals: {signals}")
         print(f"forecast_record: {self.forecast_record}")
         return signals
 
-    # def _calculate_position_size(self):
-    #     """Risk-managed position sizing"""
-    #     account = self.api.get_account()
-    #     return float(account.buying_power) * 0.01 / self.data["Close"].iloc[-1]
 
     def generate_reverse_hft_signals(self, symbol, profit_target=0.005):
         """Generate reverse immediate of generation of hft signals"""
@@ -917,21 +639,10 @@ class StockPredictor:
         print(f"Generated reverse hft signals: {reverse_signals}")
         return reverse_signals
 
+
     def _calculate_position_size(self):
         """Ensure minimum quantity with fractional safety"""
         account = self.api.get_account()
-        # if datetime.now().hour < 16 and datetime.now().hour > 9:
-        #     current_price = (
-        #         yf.download(start=date.today(), tickers=self.symbol, interval="1m")
-        #         .Close.iloc[-1]
-        #         .values[0]
-        #     )
-        # else:
-        #     current_price = (
-        #         yf.download(start=date.today(), tickers=self.symbol, interval="1d")
-        #         .Close.iloc[-1]
-        #         .values[0]
-        #     )
         alpaca_symbol = self.symbol.replace('-','/')  # Remove the last 4 characters
         try:
             request = StockLatestTradeRequest(symbol_or_symbols=alpaca_symbol)
@@ -941,7 +652,6 @@ class StockPredictor:
             latest_trade = crypto_data_client.get_crypto_latest_trade(request)
         current_price = latest_trade[alpaca_symbol].price
 
-        
         # Calculate dollar amount
         risk_amount = float(account.buying_power) * 0.01  # 1% risk
         size = risk_amount / current_price
@@ -954,12 +664,11 @@ class StockPredictor:
         else:
             return round(size, 2)  # Round to nearest whole share
 
+
     def execute_trade(self, signal):
         # Cancel stale orders every 2 minutes
         if datetime.now().minute % 2 == 0:
             self._cancel_old_orders()
-
-    
 
         symbol = self.symbol
         # current_price = self.data['Close'].iloc[-1]
@@ -988,25 +697,10 @@ class StockPredictor:
             print("Daily loss limit hit - no trading allowed")
             return
 
-        # Check sector exposure
-        # if self.get_sector_exposure() >= self.risk_params['max_sector_exposure']:
-        #     print("Max sector exposure reached")
-        #     return
-
-        # position_size = self.calculate_position_size(current_price, atr)
         position_size = round(self._calculate_position_size(current_price, atr))
-        #  In case insufficient qty of shares
-
-        # position_size = 20  # Placeholder for position size calculation
 
         if signal == "BUY":
-            # Calculate dynamic stop levels based on ATR
-            # stop_price = current_price - (0.2 * atr)
-            # take_profit = current_price + (0.3 * atr)
-            # limit_price = current_price + (0.1 * atr)
-            # Round to 2 decimal places
             take_profit = round(current_price + (0.3 * atr), 2)
-            # limit_price = round(current_price + (0.1 * atr), 2)
             stop_price = round(current_price - (0.2 * atr), 2)
 
             market_order_data = MarketOrderRequest(
@@ -1023,12 +717,6 @@ class StockPredictor:
                     stop_price=stop_price, limit_price=round(stop_price * 0.99, 2)
                 ),  # 1% trailing stop
             )
-
-            # order = self.api.submit_order(
-            #     order_data=market_order_data)
-            # order
-            # status = self.api.get_orders(order.id)
-            # print(f"Order {order.id} status: {status}")
 
             try:
                 order = self.api.submit_order(market_order_data)
@@ -1073,12 +761,7 @@ class StockPredictor:
                             limit_price=round(current_price - (2 * atr) * 0.99, 2),
                         ),
                     )
-                    # order = self.api.submit_order(
-                    #     order_data=market_order_data_sell
-                    # )
-                    # market_order_data_sell
-                    # status = self.api.get_orders(order.id)
-                    # print(f"Order {order.id} status: {status}")
+                    
                     try:
                         order = self.api.submit_order(market_order_data_sell)
                         print(f"Order submitted: {order.id}")
@@ -1128,47 +811,6 @@ class StockPredictor:
                 except Exception as e:
                     print(f"Order failed: {str(e)}")
 
-    # def execute_hft(self, symbol):
-    #     """Execute HFT strategy with cached models"""
-    #     # Get signals using cached models
-    #     signals = self.generate_hft_signals(symbol=symbol)
-
-
-    #     # Batch order processing
-    #     orders = []
-    #     for side, qty, price in signals:
-    #         order_request = MarketOrderRequest(
-    #             symbol=symbol,
-    #             qty=abs(float(qty)),
-    #             side=OrderSide.SELL if side == "SELL" else OrderSide.BUY,
-    #             limit_price=price,
-    #             type=OrderType.LIMIT,
-    #             time_in_force=TimeInForce.GTC,
-    #             order_class = OrderClass.BRACKET,
-    #             take_profit=TakeProfitRequest(
-    #                 limit_price=(
-    #                     round(price * 1.005, 2)
-    #                     if side == "BUY"
-    #                     else round(price * 0.995, 2)
-    #                 )
-    #             ),
-    #             stop_loss=StopLossRequest(
-    #                 stop_price=(
-    #                     round(price * 0.98, 2)
-    #                     if side == "BUY"
-    #                     else round(price * 1.02, 2)
-    #                 ),
-    #                 limit_price=(
-    #                     round(price * 0.98, 2)
-    #                     if side == "BUY"
-    #                     else round(price * 1.02, 2)
-    #                 ),
-    #             ),
-    #         )
-
-    #         print(signals)
-            
-    #         self.api.submit_order(order_request)
     def execute_hft(self, symbol, manual=False, crypto=False):
         """Execute HFT strategy with cached models"""
         # Get signals using cached models
@@ -1646,7 +1288,7 @@ class StockPredictor:
         # )
 
         # Merge with stock data
-        if tnx_len != len(self.data):
+        if tnx_len < len(self.data):
             economic_data = economic_data.drop(columns='TNX')
         if self.interval == "1m":
             self.data = pd.merge(self.data, economic_data, on="Datetime", how="left")
@@ -3001,6 +2643,611 @@ class StockPredictor:
                 plt.show()
 
 
+# class Backtester:
+#     """Integrated backtesting engine that works with your StockPredictor"""
+    
+#     def __init__(self, predictor, initial_capital=100000):
+#         self.predictor = predictor
+#         self.initial_capital = initial_capital
+#         self.portfolio = {
+#             'cash': initial_capital,
+#             'positions': {},
+#             'value_history': [],
+#             'transactions': []
+#         }
+#         self.slippage = 0.0005  # 5bps
+#         self.commission = 0.0001  # $0.01 per share
+    
+#     def _calculate_position_size(self, current_price):
+#         """Use your existing risk parameters"""
+#         risk_per_trade = self.initial_capital * self.predictor.risk_params['per_trade_risk']
+#         atr = self.predictor.data['ATR'].iloc[-1]
+#         return risk_per_trade / (atr * current_price)
+    
+#     # def run_backtest(self, start_date, end_date):
+#     #     """Walk-forward backtest using your existing signals"""
+#     #     nyse = mcal.get_calendar("NYSE")
+#     #     dates = nyse.schedule(start_date=start_date, end_date=end_date).index
+#     #     for i, date in enumerate(dates):
+#     #         if date not in self.predictor.data.index:
+#     #             continue
+                
+#     #         # Get historical data up to current date 
+#     #         self.predictor.data = self.predictor.data.loc[:date] # This code is good
+            
+#     #         # Generate signal using existing code
+#     #         signal = self.predictor.generate_trading_signal(self.predictor.symbol)
+            
+#     #         # Execute trade
+#     #         try: #since sometimes yf may have empty data for some date
+#     #             current_price = self.predictor.data['Close'].loc[date]
+#     #             position_size = self._calculate_position_size(current_price)
+#     #         except KeyError:
+#     #             print(f"Data not available for {date}. Skipping.")
+#     #             continue
+            
+#     #         # Apply slippage and commission
+#     #         executed_price = current_price * (1 + self.slippage) if signal == 'BUY' \
+#     #             else current_price * (1 - self.slippage)
+            
+#     #         if signal == 'BUY' and self.portfolio['cash'] > executed_price * position_size:
+#     #             self._execute_buy(executed_price, position_size, date)
+#     #         elif signal == 'SELL' and self.predictor.symbol in self.portfolio['positions']:
+#     #             self._execute_sell(executed_price, date)
+            
+#     #         # Update portfolio value
+#     #         self._update_portfolio_value(date)
+            
+#     #         # Check risk limits
+#     #         if self._check_daily_loss():
+#     #             break
+                
+#     #     return self._generate_report()
+
+#     def run_backtest(self, start_date, end_date):
+#         """More robust date handling"""
+#         try:
+#             nyse = mcal.get_calendar("NYSE")
+#             schedule = nyse.schedule(start_date=start_date, end_date=end_date)
+#             if schedule.empty:
+#                 print(f"No trading days between {start_date} and {end_date}")
+#                 return pd.DataFrame(), {'error': 'No trading days'}
+                
+#             dates = schedule.index.tz_localize(None)
+#         except Exception as e:
+#             print(f"Date error: {str(e)}")
+#             return pd.DataFrame(), {'error': str(e)}
+
+#         for i, date in enumerate(dates):
+#             if not (date in self.predictor.data.index):
+#                 continue
+                
+#             # Rest of existing logic
+#             # ...
+#             #  Get historical data up to current date 
+#             self.predictor.data = self.predictor.data.loc[:date] # This code is good
+            
+#             # Generate signal using existing code
+#             signal = self.predictor.generate_trading_signal(self.predictor.symbol)
+            
+#             # Execute trade
+#             try: #since sometimes yf may have empty data for some date
+#                 current_price = self.predictor.data['Close'].loc[date]
+#                 position_size = self._calculate_position_size(current_price)
+#             except KeyError:
+#                 print(f"Data not available for {date}. Skipping.")
+#                 continue
+            
+#             # Apply slippage and commission
+#             executed_price = current_price * (1 + self.slippage) if signal == 'BUY' \
+#                 else current_price * (1 - self.slippage)
+            
+#             if signal == 'BUY' and self.portfolio['cash'] > executed_price * position_size:
+#                 self._execute_buy(executed_price, position_size, date)
+#             elif signal == 'SELL' and self.predictor.symbol in self.portfolio['positions']:
+#                 self._execute_sell(executed_price, date)
+            
+#             # Update portfolio value
+#             self._update_portfolio_value(date)
+            
+#             # Check risk limits
+#             if self._check_daily_loss():
+#                 break
+                
+#         return self._generate_report()
+        
+
+
+#     def _execute_buy(self, price, qty, date):
+#         cost = price * qty + self.commission * qty
+#         self.portfolio['cash'] -= cost
+#         self.portfolio['positions'][self.predictor.symbol] = {
+#             'qty': qty, 
+#             'entry_price': price,
+#             'entry_date': date
+#         }
+#         self.portfolio['transactions'].append(('BUY', price, qty, date))
+
+#     # def _execute_sell(self, price, date):
+#     #     position = self.portfolio['positions'].pop(self.predictor.symbol)
+#     #     proceeds = price * position['qty'] - self.commission * position['qty']
+#     #     self.portfolio['cash'] += proceeds
+#     #     self.portfolio['transactions'].append(('SELL', price, position['qty'], date))
+
+
+
+#     def _execute_sell(self, price, date):
+#         if self.predictor.symbol not in self.portfolio['positions']:
+#             print(f"No position to sell for {self.predictor.symbol}")
+#             return
+            
+#         position = self.portfolio['positions'].pop(self.predictor.symbol)
+#         proceeds = price * position['qty'] - self.commission * position['qty']
+#         self.portfolio['cash'] += proceeds
+#         self.portfolio['transactions'].append(('SELL', price, position['qty'], date))
+
+
+#     # def _update_portfolio_value(self, date):
+#     #     position_value = 0
+#     #     for sym, pos in self.portfolio['positions'].items():
+#     #         position_value += pos['qty'] * self.predictor.data['Close'].loc[date]
+#     #     self.portfolio['value_history'].append({
+#     #         'date': date,
+#     #         'value': self.portfolio['cash'] + position_value
+#     #     })
+    
+#     def _check_daily_loss(self):
+#         """Use your existing risk management"""
+#         if len(self.portfolio['value_history']) < 2:
+#             return False
+#         daily_pct = (self.portfolio['value_history'][-1]['value'] / 
+#                     self.portfolio['value_history'][-2]['value']) - 1
+#         return daily_pct < self.predictor.risk_params['daily_loss_limit']
+
+#     # def _generate_report(self):
+#     #     """Generate performance report using your existing metrics"""
+#     #     df = pd.DataFrame(self.portfolio['value_history']).set_index('date')
+#     #     returns = df['value'].pct_change().dropna()
+        
+#     #     report = {
+#     #         'sharpe': returns.mean() / returns.std() * np.sqrt(252),
+#     #         'max_drawdown': (df['value'] / df['value'].cummax() - 1).min(),
+#     #         'total_return': df['value'].iloc[-1] / self.initial_capital - 1,
+#     #         'win_rate': len([t for t in self.portfolio['transactions'] if t[0] == 'SELL' and 
+#     #                       (t[1] - self.portfolio['positions'][t[3]]['entry_price']) > 0]) / 
+#     #                      max(1, len([t for t in self.portfolio['transactions'] if t[0] == 'SELL']))
+#     #     }
+#     #     return df, report
+#     def _update_portfolio_value(self, date):
+#         position_value = 0
+#         for sym, pos in self.portfolio['positions'].items():
+#             if date in self.predictor.data.index:  # Add validation
+#                 position_value += pos['qty'] * self.predictor.data['Close'].loc[date]
+        
+#         # Ensure consistent data format
+#         self.portfolio['value_history'].append({
+#             'date': pd.to_datetime(date),
+#             'value': self.portfolio['cash'] + position_value
+#         })
+
+#     def _generate_report(self):
+#         """More robust report generation"""
+#         if not self.portfolio['value_history']:
+#             return pd.DataFrame(), {'error': 'No trades executed'}
+        
+#         try:
+#             df = pd.DataFrame(self.portfolio['value_history'])
+#             df = df.set_index('date').sort_index()
+            
+#             if df.empty:
+#                 return df, {'error': 'Empty portfolio history'}
+                
+#             returns = df['value'].pct_change().dropna()
+            
+#             if len(returns) < 2:
+#                 return df, {'error': 'Insufficient data for metrics'}
+            
+#             report = {
+#                 'sharpe': returns.mean() / returns.std() * np.sqrt(252),
+#                 'max_drawdown': (df['value'] / df['value'].cummax() - 1).min(),
+#                 'total_return': df['value'].iloc[-1] / self.initial_capital - 1,
+#                 'num_trades': len(self.portfolio['transactions']),
+#                 'win_rate': self._calculate_win_rate()
+#             }
+#             return df, report
+            
+#         except KeyError as e:
+#             print(f"Report generation error: {str(e)}")
+#             return pd.DataFrame(), {'error': str(e)}
+
+#     def _calculate_win_rate(self):
+#         """Safer win rate calculation"""
+#         sell_trades = [t for t in self.portfolio['transactions'] if t[0] == 'SELL']
+#         if not sell_trades:
+#             return 0.0
+            
+#         winning_trades = 0
+#         for trade in sell_trades:
+#             entry_price = next(
+#                 (t[1] for t in self.portfolio['transactions'] 
+#                 if t[0] == 'BUY' and t[3] == trade[3]), None)
+#             if entry_price and trade[1] > entry_price:
+#                 winning_trades += 1
+                
+#         return winning_trades / len(sell_trades)
+
+
+class Backtester:
+    """Integrated backtesting engine that works with your StockPredictor"""
+    
+    def __init__(self, predictor, initial_capital=100000):
+        self.predictor = predictor
+        self.initial_capital = initial_capital
+        self.portfolio = {
+            'cash': initial_capital,
+            'positions': {},
+            'value_history': [],
+            'transactions': []
+        }
+        self.slippage = 0.0005  # 5bps
+        self.commission = 0.0001  # $0.01 per share
+        self.full_data = None  # Placeholder for full data
+    
+    def _calculate_position_size(self, current_price):
+        """Use your existing risk parameters"""
+        risk_per_trade = self.initial_capital * self.predictor.risk_params['per_trade_risk']
+        atr = self.predictor.data['ATR'].iloc[-1]
+        return risk_per_trade / (atr * current_price)
+         
+    
+    def run_backtest(self, start_date, end_date):
+        """More robust date handling"""
+        try:
+            import pandas_market_calendars as mcal
+            import pandas as pd
+            import numpy as np
+            
+            nyse = mcal.get_calendar("NYSE")
+            schedule = nyse.schedule(start_date=start_date, end_date=end_date)
+            if schedule.empty:
+                print(f"No trading days between {start_date} and {end_date}")
+                return pd.DataFrame(), {'error': 'No trading days'}
+                
+            dates = schedule.index.tz_localize(None)
+            print('First date:', dates[0])
+            print('Last date:', dates[-1])
+        except Exception as e:
+            print(f"Date error: {str(e)}")
+            return pd.DataFrame(), {'error': str(e)}
+    
+        # if rebalance_frequency == 'weekly':
+        #     rebalance_dates = pd.date_range(start=start_date, end=end_date, freq='W-FRI')
+        # elif rebalance_frequency == 'monthly':
+        #     rebalance_dates = pd.date_range(start=start_date, end=end_date, freq='BM')
+        # elif rebalance_frequency == 'quarterly':
+        #     rebalance_dates = pd.date_range(start=start_date, end=end_date, freq='BQ')
+        # else:
+        #     raise ValueError("rebalance_frequency must be 'weekly', 'monthly', or 'quarterly'")
+        
+
+        # Store original full data
+        full_data = self.predictor.data.copy()# data till today and so no end date is needed for the stock predictor
+        self.full_data = full_data
+        
+        # Get signal from new model once three days
+        i = 0
+        first_date = dates[0]
+        for date in dates:
+            # Make sure date exists in our data
+            if date not in full_data.index:
+                print(f"Date {date} not in data. Skipping.")
+                continue
+
+            # is_rebalance_day = pd.to_datetime(date) in rebalance_dates
+
+            # if is_rebalance_day:
+            #     print(f"Running model on rebalance date: {date}")
+
+
+
+            
+            if i % 10 == 0 and i != 0: # regenerate signal every 10 days
+                first_date = date 
+
+
+
+                
+            # self.predictor.end_date = date - pd.Timedelta(days=1)
+            self.predictor.end_date = first_date
+            self.predictor.load_data()  # Fresh load with cutoff
+            # self.predictor.data = self.predictor.data.loc[:date]  
+            print(f'last data of predictor data: {self.predictor.data.index[-1]}')
+            i += 1
+        
+            # Filter data up to current date
+            # self.predictor.data = full_data.loc[:date].copy()
+            
+            # Generate signal using existing code
+            signal = self.predictor.generate_trading_signal(self.predictor.symbol, horizon = 10)
+            
+            # Execute trade
+            try:
+
+                current_price = full_data['Close'].loc[date]
+                position_size = self._calculate_position_size(current_price)
+            except (KeyError, IndexError) as e:
+                print(f"Data not available for {date}. Error: {e}. Skipping.")
+                continue
+            
+            # Apply slippage and commission
+            executed_price = current_price * (1 + self.slippage) if signal == 'BUY' \
+                else current_price * (1 - self.slippage)
+            
+            if signal == 'BUY' and self.portfolio['cash'] > executed_price * position_size:
+                self._execute_buy(executed_price, position_size, date)
+            elif signal == 'SELL' and self.predictor.symbol in self.portfolio['positions']:
+                self._execute_sell(executed_price, date)
+            else:
+                print(f"Signal is hold so no trade executed for {self.predictor.symbol} on {date} ")
+            
+            # Update portfolio value
+            self._update_portfolio_value(date)
+            
+            # Check risk limits
+            if self._check_daily_loss():
+                print(f"Daily loss limit hit on {date}. Stopping backtest.")
+                break
+        
+        # Restore original data
+        self.predictor.data = full_data
+        
+        return self._generate_report()
+        
+# ------------------------------------------------------------------------------------------------------------
+
+    def _execute_buy(self, price, qty, date):
+        cost = price * qty + self.commission * qty
+        self.portfolio['cash'] -= cost
+        # Want to ensure we don't overwrite existing positions but add to them
+        if self.predictor.symbol in self.portfolio['positions']:
+            self.portfolio['positions'][self.predictor.symbol]['qty'] += qty
+            self.portfolio['positions'][self.predictor.symbol]['Avg_entry_price'] = (
+                self.portfolio['positions'][self.predictor.symbol]['Avg_entry_price'] *
+                self.portfolio['positions'][self.predictor.symbol]['qty'] + price * qty 
+            ) / (self.portfolio['positions'][self.predictor.symbol]['qty'] + qty)
+        else:
+            # Initialize new position
+            self.portfolio['positions'][self.predictor.symbol] = {
+                'qty': qty, 
+                'Avg_entry_price': price,
+                # 'entry_date': date
+            }
+
+
+
+        self.portfolio['transactions'].append(('BUY', price, qty, date))
+        print(f"BUY executed on {date}: {qty} shares at ${price:.2f}")
+
+
+
+    def _execute_sell(self, price, date):
+        if self.predictor.symbol not in self.portfolio['positions']:
+            print(f"No position to sell for {self.predictor.symbol} but want to short")
+            # Naked shorting
+            qty = self._calculate_position_size(price)
+            self.portfolio['cash'] += price * qty - self.commission * qty
+            self.portfolio['transactions'].append(('SELL', price, qty, date))
+            self.portfolio['positions'][self.predictor.symbol] = {
+                'qty': -qty, 
+                'Avg_entry_price': price,
+                # 'entry_date': date
+            }
+            print(f"SELL executed on {date}: {qty} shares at ${price:.2f}")
+            return
+        # Option 1: liquidate all positions
+        # position = self.portfolio['positions'].pop(self.predictor.symbol)
+        # proceeds = price * position['qty'] - self.commission * position['qty']
+        # self.portfolio['cash'] += proceeds
+        # profit = proceeds - (position['Avg_entry_price'] * position['qty'] + self.commission * position['qty'])
+        # self.portfolio['transactions'].append(('SELL', price, position['qty'], date))
+        # print(f"SELL executed on {date}: {position['qty']} shares at ${price:.2f}, profit: ${profit:.2f}")
+        
+        # Option 2: partial liquidation from the postion by amount of shares calculated
+        position = self.portfolio['positions'][self.predictor.symbol]
+        qty = self._calculate_position_size(price)
+        if qty >= position['qty']:
+            qty = position['qty']
+            self.portfolio['positions'].pop(self.predictor.symbol)
+
+        position['qty'] -= qty
+        proceeds = price * qty - self.commission * qty
+        self.portfolio['cash'] += proceeds
+        profit = proceeds - (position['Avg_entry_price'] * qty + self.commission * qty)
+        self.portfolio['transactions'].append(('SELL', price, qty, date))
+        print(f"SELL executed on {date}: {qty} shares at ${price:.2f}, profit: ${profit:.2f}")
+
+
+
+
+
+    def _check_daily_loss(self):
+        """Use your existing risk management"""
+        if len(self.portfolio['value_history']) < 2:
+            return False
+        daily_pct = (self.portfolio['value_history'][-1]['value'] / 
+                    self.portfolio['value_history'][-2]['value']) - 1
+        return daily_pct < self.predictor.risk_params['daily_loss_limit']
+ 
+    def _update_portfolio_value(self, date):
+        position_value = 0
+        for sym, pos in self.portfolio['positions'].items():
+            try:
+                if sym == self.predictor.symbol:  # We're only tracking one symbol
+                    # current_price = self.predictor.data['Close'].iloc[-1]
+                    # the current price at the data, not the last date
+                    # current_price = self.predictor.data['Close'].loc[date]
+                    current_price = self.full_data['Close'].loc[date]
+                    if pos['qty'] < 0:
+                        position_value -= -pos['qty'] * current_price
+                    else:
+                        position_value += pos['qty'] * current_price
+            except (KeyError, IndexError) as e:
+                print(f"Error updating portfolio value: {e}")
+        
+        total_value = self.portfolio['cash'] + position_value
+        
+        # Ensure consistent data format
+        self.portfolio['value_history'].append({
+            'date': pd.to_datetime(date),
+            'value': total_value
+        })
+        print(f"Portfolio value on {date}: ${total_value:.2f}")
+
+    def _generate_report(self):
+        """More robust report generation"""
+        import pandas as pd
+        import numpy as np
+        
+        if not self.portfolio['value_history']:
+            print("No portfolio history to generate report")
+            return pd.DataFrame(), {'error': 'No trades executed'}
+        
+        try:
+            df = pd.DataFrame(self.portfolio['value_history'])
+            df = df.set_index('date').sort_index()
+            
+            if df.empty:
+                return df, {'error': 'Empty portfolio history'}
+                
+            returns = df['value'].pct_change().dropna()
+            
+            if len(returns) < 2:
+                return df, {'error': 'Insufficient data for metrics'}
+            
+            report = {
+                'sharpe': returns.mean() / returns.std() * np.sqrt(252),
+                'max_drawdown': (df['value'] / df['value'].cummax() - 1).min(),
+                'total_return': df['value'].iloc[-1] / self.initial_capital - 1,
+                'num_trades': len(self.portfolio['transactions']),
+                'win_rate': self._calculate_win_rate()
+            }
+            print(f"Report generated: {report}")
+            return df, report
+            
+        except Exception as e:
+            print(f"Report generation error: {str(e)}")
+            return pd.DataFrame(), {'error': str(e)}
+
+    # def _calculate_win_rate(self, history_df):
+    #     """Safer win rate calculation"""
+    #     # Definition: Winning trades means the trade makes the value of profolio higher than the previous trade (whether or not the position is liquidated)
+    #     # We can use the history_df to calculate the win rate
+    #     return (history_df['value'].diff().dropna()>0).astype(int).sum() / len(self.portfolio['transactions']) if len(self.portfolio['transactions']) > 0 else 0.0
+    def _calculate_win_rate(self):
+        """Calculate win rate from completed trades. Only count winning trades when the position is liquidated"""
+        buy_trades = [(p, d, q) for t, p, q, d in self.portfolio['transactions'] if t == 'BUY']
+        sell_trades = [(p, d, q) for t, p, q, d in self.portfolio['transactions'] if t == 'SELL']
+        
+        if not sell_trades:
+            return 0.0
+        
+        winning_trades = 0
+        
+        # Match buys with sells sequentially (FIFO)
+        for i in range(min(len(buy_trades), len(sell_trades))):
+            buy_price = buy_trades[i][0]
+            sell_price = sell_trades[i][0]
+            
+            if sell_price > buy_price:
+                winning_trades += 1
+        
+        return winning_trades / len(sell_trades) #only count winning
+        
+
+        
+
+class StressTester(Backtester):
+    """Stress tests using your existing strategy"""
+    
+    def _apply_market_crash(self, date):
+        """Simulate flash crash scenario"""
+        if np.random.rand() < 0.05:  # 5% chance daily
+            self.predictor.data.loc[date:, 'Close'] *= 0.9  # 10% drop
+            self.predictor.data['Volatility'] *= 2  # Spike volatility
+            
+    def _apply_liquidity_crisis(self, date):
+        """Simulate bid-ask spread widening"""
+        if np.random.rand() < 0.03:  # 3% chance daily
+            self.slippage = 0.01  # 1% slippage
+            self.commission = 0.001  # $0.1 per share
+            
+    def run_stress_test(self, start_date, end_date):
+        """Run stress test using your existing strategy"""
+        nyse = mcal.get_calendar("NYSE")
+        dates = nyse.schedule(start_date=start_date, end_date=end_date).index
+        for date in dates:
+            # Apply stress events
+            self._apply_market_crash(date)
+            self._apply_liquidity_crisis(date)
+            
+            # Run normal backtest
+            super().run_backtest(date, date)
+            
+        return self._generate_report()
+    
+    def _run_stress_tests(self, history_df):
+        """Run stress tests on the strategy"""
+        if len(history_df) < 30:  # Need sufficient data
+            return {'stress_test': 'Insufficient data'}
+        
+        results = {}
+        returns = history_df['value'].pct_change().dropna()
+        
+        # Test 1: Worst week performance
+        weekly_returns = (history_df['value'].resample('W').last().pct_change().dropna())
+        results['worst_week'] = weekly_returns.min()
+        
+        # Test 2: Performance in high volatility periods
+        rolling_vol = returns.rolling(21).std() * np.sqrt(252)
+        high_vol_returns = returns[rolling_vol > rolling_vol.quantile(0.75)]
+        results['high_vol_performance'] = high_vol_returns.mean() * 252 if not high_vol_returns.empty else 0
+        
+        # Test 3: Monte Carlo simulation - 100 paths
+        mc_results = self._monte_carlo_simulation(returns, paths=100)
+        results['mc_5pct_var'] = mc_results['5pct_var']
+        results['mc_worst_drawdown'] = mc_results['worst_drawdown']
+        
+        return {'stress_tests': results}
+    
+    def _monte_carlo_simulation(self, returns, paths=100, horizon=252):
+        """Run Monte Carlo simulation to test strategy robustness"""
+        sim_returns = np.random.choice(
+            returns.values,
+            size=(paths, horizon),
+            replace=True
+        )
+        
+        # Convert returns to paths
+        sim_paths = np.cumprod(1 + sim_returns, axis=1)
+        
+        # Calculate metrics
+        final_values = sim_paths[:, -1]
+        drawdowns = np.zeros(paths)
+        
+        for i in range(paths):
+            drawdowns[i] = np.min(sim_paths[i] / np.maximum.accumulate(sim_paths[i])) - 1
+        
+        return {
+            '5pct_var': np.percentile(final_values, 5) - 1,  # 5% VaR
+            'worst_drawdown': np.min(drawdowns)  # Worst drawdown across all sims
+        }
+
+
+
+
+
+
 # Example usage
 if __name__ == "__main__":
     predictor = StockPredictor("AAPL", start_date="2020-01-01")
+

@@ -9,13 +9,25 @@ import seaborn as sns
 from sklearn.model_selection import TimeSeriesSplit, cross_val_score, train_test_split
 from sklearn.metrics import root_mean_squared_error
 from sklearn.preprocessing import StandardScaler
+
 Scaler = StandardScaler()
 
 
-def optimize_lookback(X, y, model, min_window=50, max_window=None, step_size=20, n_splits=5, metrics='rmse', cross_val = False):
+def optimize_lookback(
+    X: pd.DataFrame,
+    y: pd.Series,
+    model,
+    min_window=50,
+    max_window=None,
+    step_size=20,
+    n_splits=5,
+    metrics="rmse",
+    cross_val=False,
+    output=False,
+):
     """
     Dynamically finds the optimal lookback window using walk-forward validation
-    
+
     Args:
         X (pd.DataFrame): Features
         y (pd.Series): Target
@@ -23,39 +35,31 @@ def optimize_lookback(X, y, model, min_window=50, max_window=None, step_size=20,
         min_window (int): Minimum training window size
         step_size (int): Increment to test larger windows
         n_splits (int): CV splits
-        
+        metrics (str): Metric to optimize ('rmse' or 'r2')
+        cross_val (bool): Whether to use cross-validation
+        max_window (int): Maximum training window size
+    
+
     Returns:
         (int): Optimal window size in samples
         (pd.DataFrame): Validation results
     """
     if max_window is None:
-        max_window = round(0.75*len(X))    # Don't use more than 66% of data for training
+        max_window = round(
+            0.75 * len(X)
+        )  
     else:
         max_window = max_window
     results = {}
-    
+
     for window in range(min_window, max_window, step_size):
-        # tscv = TimeSeriesSplit(n_splits=n_splits, test_size=window//4)
         scores = []
         r2 = []
-        
-        # for train_idx, test_idx in tscv.split(X):
-        #     X_train, X_test = X.iloc[train_idx[-window:]], X.iloc[test_idx]
-        #     y_train, y_test = y.iloc[train_idx[-window:]], y.iloc[test_idx]
-        #     X_train = Scaler.fit_transform(X_train)
-        #     X_test = Scaler.transform(X_test)
-        #     model.fit(X_train, y_train)
-        #     preds = model.predict(X_test)
-        #     scores.append(root_mean_squared_error(y_test, preds))
-        #     # hand compute r2 score 
-        #     r2.append(  
-        #         1 - (np.sum((y_test - preds) ** 2) / np.sum((y_test - np.mean(y_test)) ** 2))
-        #     )  # R^2 = 1 - (SS_res / SS_tot)
 
         if not cross_val:
             X_train, X_test, y_train, y_test = train_test_split(
-                    X.iloc[-window:,], y.iloc[-window:,], test_size=0.2, random_state=42
-                )
+                X.iloc[-window:,], y.iloc[-window:,], test_size=0.2, random_state=42
+            )
             scaler = StandardScaler()
             X_train_scaled = scaler.fit_transform(X_train)
             X_test_scaled = scaler.transform(X_test)
@@ -63,13 +67,17 @@ def optimize_lookback(X, y, model, min_window=50, max_window=None, step_size=20,
             preds = model.predict(X_test_scaled)
             scores.append(root_mean_squared_error(y_test, preds))
             # hand compute r2 score
-            r2.append(  
-                1 - (np.sum((y_test - preds) ** 2) / np.sum((y_test - np.mean(y_test)) ** 2))
-            )   
+            r2.append(
+                1
+                - (
+                    np.sum((y_test - preds) ** 2)
+                    / np.sum((y_test - np.mean(y_test)) ** 2)
+                )
+            )
 
         else:
             # Cross-validation
-            tscv = TimeSeriesSplit(n_splits=n_splits, test_size=window//4)
+            tscv = TimeSeriesSplit(n_splits=n_splits, test_size=window // 4)
             for train_idx, test_idx in tscv.split(X):
                 X_train, X_test = X.iloc[train_idx[-window:]], X.iloc[test_idx]
                 y_train, y_test = y.iloc[train_idx[-window:]], y.iloc[test_idx]
@@ -79,38 +87,34 @@ def optimize_lookback(X, y, model, min_window=50, max_window=None, step_size=20,
                 model.fit(X_train_scaled, y_train)
                 preds = model.predict(X_test_scaled)
                 scores.append(root_mean_squared_error(y_test, preds))
-                # hand compute r2 score 
-                r2.append(  
-                    1 - (np.sum((y_test - preds) ** 2) / np.sum((y_test - np.mean(y_test)) ** 2))
+                # hand compute r2 score
+                r2.append(
+                    1
+                    - (
+                        np.sum((y_test - preds) ** 2)
+                        / np.sum((y_test - np.mean(y_test)) ** 2)
+                    )
                 )
             # avoid getting no input for scores and r2 after rerun in a notebook
-            
-                
-
-
-
-
-
-         
-        print('Scores', scores)  
-        results[window] = { 
-            'rmse': np.mean(scores),
-            'std': np.std(scores),
-            'r2': np.mean(r2),
-
+        if output:
+            print("Scores", scores)
+        results[window] = {
+            "rmse": np.mean(scores),
+            "std": np.std(scores),
+            "r2": np.mean(r2),
         }
-        print(results)
+        if output:
+            print(results)
     results_df = pd.DataFrame(results).T
-    print(results_df)
+    if output:
+        print(results_df)
     # optimal_window = results_df.loc[results_df['rmse'].idxmin(), 'window']
-    if metrics == 'rmse':
-        optimal_window = results_df['rmse'].idxmin()
-    elif metrics == 'r2':
-        optimal_window =results_df['r2'].idxmax()
-    
+    if metrics == "rmse":
+        optimal_window = results_df["rmse"].idxmin()
+    elif metrics == "r2":
+        optimal_window = results_df["r2"].idxmax()
+
     return optimal_window
-
-
 
 
 def calculate_vif(data: pd.DataFrame) -> pd.DataFrame:
@@ -130,10 +134,16 @@ def calculate_vif(data: pd.DataFrame) -> pd.DataFrame:
     ]
     return vif_data.sort_values(by="VIF", ascending=False)
 
+
 def vizualize_correlation(data: pd.DataFrame):
+    """
+    Visualize correlation matrix using heatmap
+    Parameters:
+        data (pd.DataFrame): Input DataFrame with features
+    """
     plt.figure(figsize=(30, 30))
     correlation_mat = data.corr()
-    sns.heatmap(correlation_mat, annot = True, cmap='coolwarm')
+    sns.heatmap(correlation_mat, annot=True, cmap="coolwarm")
     plt.show()
 
 

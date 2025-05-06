@@ -32,10 +32,6 @@ from statsforecast.utils import AirPassengersDF
 import warnings
 from scipy.optimize import OptimizeWarning
 
-from matplotlib import pyplot as plt
-from mpl_toolkits.mplot3d import Axes3D
-
-
 # Custom Gradient Descent Implementations
 class GradientDescentRegressor(BaseEstimator, RegressorMixin):
     """Custom GD implementation with momentum and adaptive learning

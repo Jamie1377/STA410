@@ -9,6 +9,7 @@ from sklearn.preprocessing import StandardScaler
 from scipy.optimize import minimize
 from scipy.optimize import minimize
 from scipy.linalg import block_diag
+from scipy.linalg import solve_triangular
 
 # Boosting Models
 from xgboost import XGBRegressor
@@ -57,7 +58,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
 
     def __init__(
         self,
-        n_iter=1000,
+        n_iter=int(1000),
         lr=0.01,
         alpha=0.0001,
         l1_ratio=0.0001,
@@ -79,11 +80,15 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         self.batch_size = batch_size
         self.rmsprop = rmsprop
         self.newton = newton
-        self.coef_ = None
-        self.intercept_ = 0.0
+        self.coef_ = None # w
+        self.intercept_ = 0.0 # b
+        self.mse_history = []
         self.loss_history = []
         self.loss_mape_history = []
+        self.val_mse_history = []
         self.val_loss_history = []
+        self.coef_history = []
+        self.grad_history = []
         self.velocity = None  # Velocity is also called decay factor
         self.sq_grad_avg = None
         self.gradients_gd = None
@@ -94,6 +99,14 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
     def _add_bias(self, X):
         """Add bias term to input features"""
         return np.c_[np.ones(X.shape[0]), X]
+
+    
+    def _qr_initialization(self, X_b, y):
+        """Compute initial coefficients using QR decomposition."""
+        Q, R = np.linalg.qr(X_b)  # Decompose X_b = Q @ R
+        QTy = Q.T @ y  # Project y onto Q's orthogonal basis
+        return solve_triangular(R, QTy)  # Solve R @ coef = Q^T y
+
 
     def fit(self, X, y):
         """Fit the model using GD or SGD
@@ -131,13 +144,18 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         if X_val is not None and y_val is not None:
             X_val = self._add_bias(X_val)
         n_samples, n_features = X_b.shape
-        self.coef_ = np.zeros(n_features)
+        # self.coef_ = np.zeros(n_features)
+        # self.coef_ = np.random.randn(n_features) * 0.01  # Initialize with small random values
+        self.coef_ = self._qr_initialization(X_b, y)
+        self.intercept_ = np.mean(y)
+        self.coef_[0] = self.intercept_  # Set intercept to the first coefficient
 
         # Initialize velocity and sq_grad_avg as zero vectors
         self.velocity = np.zeros(n_features)
         self.sq_grad_avg = np.zeros(n_features)
         
         for _ in range(self.n_iter):
+            # Compute gradients from the loss function (2 is from the square)
             self.gradients_gd = 2 / n_samples * X_b.T @ (X_b @ self.coef_ - y)
             self.gradients_gd += self.alpha * self.coef_  # L2 regularization
             self.gradients_gd += self.l1_ratio * np.sign(
@@ -175,25 +193,31 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
                 + self.alpha * self.coef_
                 + self.l1_ratio * np.sign(self.coef_)
             )
-
+            self.grad_history.append(self.gradients_gd)
+            self.coef_history.append(self.coef_)
             # Track validation loss
             if X_val is not None and y_val is not None:
                 val_pred =  X_val @ self.coef_
-                val_loss = np.mean((val_pred - y_val) ** 2) + 0.5 * self.alpha * np.sum(
-                    self.coef_**2 + self.l1_ratio * np.sum(np.abs(self.coef_))
-                )
+                val_mse = np.mean((val_pred - y_val) ** 2)
+                val_loss = val_mse + 0.5 * self.alpha * np.sum(
+                    self.coef_**2) + self.l1_ratio * np.sum(np.abs(self.coef_))
+                
                 self.val_loss_history.append(val_loss)
+                self.val_mse_history.append(val_mse)
 
             # Store loss
-            loss = np.mean((X_b @ self.coef_ - y) ** 2) + 0.5 * self.alpha * np.sum(
-                self.coef_**2 + self.l1_ratio * np.sum(np.abs(self.coef_))    ### regularization form loss function MSE but stock price is different so MAPE maybe better
-            )
+            mse = np.mean((X_b @ self.coef_ - y) ** 2)
+            loss = mse 
+            + 0.5 * self.alpha * np.sum(self.coef_**2) 
+            + self.l1_ratio * np.sum(np.abs(self.coef_))    ### regularization form loss function MSE but stock price is different so MAPE maybe better
+
+            self.mse_history.append(mse)
             self.loss_history.append(loss)
 
             # Early stopping condition
             loss_mape = np.mean(
                 np.abs((X_b @ self.coef_ - y) / y)
-            )   
+            )  
             self.loss_mape_history.append(loss_mape)
 
             if self.early_stopping and len(self.loss_history) > 2:
@@ -223,7 +247,11 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         random.seed(self.random_state)
         X_b = self._add_bias(X)
         n_samples, n_features = X_b.shape
-        self.coef_ = np.zeros(n_features)
+        # self.coef_ = np.zeros(n_features)
+        # self.coef_ = np.random.randn(n_features) * 0.01  # Initialize with small random values
+        self.coef_ = self._qr_initialization(X_b, y)
+        self.intercept_ = np.mean(y)
+        self.coef_[0] = self.intercept_  # Set intercept to the first coefficient
        
         # Initialize velocity and sq_grad_avg as zero vectors
         self.velocity = np.zeros(n_features)
@@ -234,7 +262,11 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
                 n_samples, self.batch_size, replace=False
             )  # Random Choice of indices
             X_batch = X_b[indices]
-            y_batch = y[indices]
+            try:
+                y_batch = y[indices]
+            except IndexError:
+                y_batch = y.iloc[indices]
+
 
             self.gradients_sgd = (
                 2 / self.batch_size * X_batch.T @ (X_batch @ self.coef_ - y_batch)
@@ -264,12 +296,16 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
             self.coef_ -= self.velocity
 
             # Store loss
+            mse = np.mean((X_batch @ self.coef_ - y_batch) ** 2)
             loss = (
-                np.mean((X_batch @ self.coef_ - y_batch) ** 2)
+                mse
                 + 0.5 * self.alpha * np.sum(self.coef_**2)
                 + self.l1_ratio * np.sum(np.abs(self.coef_))
             )
+            self.mse_history.append(mse)
             self.loss_history.append(loss)
+            self.grad_history.append(self.gradients_sgd)
+            self.coef_history.append(self.coef_)
 
         self.intercept_ = self.coef_[0]
         self.coef_ = self.coef_[1:]

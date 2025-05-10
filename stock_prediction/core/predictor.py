@@ -477,36 +477,36 @@ class StockPredictor:
         self.data = self.data.iloc[-lookback:]
         features = [
             "Close",
-            "MA_50",
+            # "MA_50",
             # "MA_200",
             # "High",
             # "Low",
-            "MA_7",
-            # "MA_21",
+            # "MA_7",
+            "MA_21",
             "SP500",
             "TNX",
-            "USDCAD=X",
-            # "Tech",
+            # "USDCAD=X",
+            "Tech",
             # "Fin",
             # "VIX",
-            "Energy",
-            "rolling_min",
-            "rolling_median",
+            # "Energy",
+            # "rolling_min",
+            # "rolling_median",
             # "rolling_sum",
             "rolling_ema",
             "rolling_25p",
-            "rolling_75p",
+            # "rolling_75p",
             "RSI",
             "MACD",
             "ATR",
             "Upper_Bollinger",
-            "Lower_Bollinger",
+            # "Lower_Bollinger",
             "VWAP",
             # "Volatility",
             "Daily Returns",
             "Williams_%R",
             "Momentum_Interaction",
-            # "Stochastic_%K",
+            "Stochastic_%K",
             "Stochastic_%D",
             "Momentum_Score",
         ]  # Use same features as in notebook
@@ -557,9 +557,9 @@ class StockPredictor:
 
         
         # Generate signal (Trend of the forecast)
-        if predicted_price_last_day >=  predicted_price_day_1 * 1.01:  # 1% threshold
+        if predicted_price_last_day >=  predicted_price_day_1 * 1.005:  # 1% threshold
             return "BUY"
-        elif predicted_price_last_day <= predicted_price_day_1 * 0.99:
+        elif predicted_price_last_day <= predicted_price_day_1 * 0.995:
             return "SELL"
         else:
             return "HOLD"
@@ -2895,9 +2895,11 @@ class Backtester:
     
     def _calculate_position_size(self, current_price):
         """Use your existing risk parameters"""
-        risk_per_trade = self.initial_capital * self.predictor.risk_params['per_trade_risk']
-        atr = self.predictor.data['ATR'].iloc[-1]
-        return risk_per_trade / (atr * current_price)
+        # risk_per_trade = self.initial_capital * self.predictor.risk_params['per_trade_risk']
+        # atr = self.predictor.data['ATR'].iloc[-1]
+        # return risk_per_trade / (atr * current_price)
+        risk_per_trade = self.portfolio['cash'] * self.predictor.risk_params['per_trade_risk']
+        return risk_per_trade / current_price
          
     
     def run_backtest(self, start_date, end_date):
@@ -2951,7 +2953,7 @@ class Backtester:
 
 
             
-            if i % 10 == 0 and i != 0: # regenerate signal every 10 days
+            if i % 3 == 0 and i != 0: # regenerate signal every 10 days
                 first_date = date 
 
 
@@ -2968,7 +2970,7 @@ class Backtester:
             # self.predictor.data = full_data.loc[:date].copy()
             
             # Generate signal using existing code
-            signal = self.predictor.generate_trading_signal(self.predictor.symbol, horizon = 10)
+            signal = self.predictor.generate_trading_signal(self.predictor.symbol, horizon = 5)
             
             # Execute trade
             try:
@@ -3099,7 +3101,8 @@ class Backtester:
         # Ensure consistent data format
         self.portfolio['value_history'].append({
             'date': pd.to_datetime(date),
-            'value': total_value
+            'value': total_value,
+            'cash': self.portfolio['cash'],
         })
         print(f"Portfolio value on {date}: ${total_value:.2f}")
 

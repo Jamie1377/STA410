@@ -104,8 +104,13 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
     def _qr_initialization(self, X_b, y):
         """Compute initial coefficients using QR decomposition."""
         Q, R = np.linalg.qr(X_b)  # Decompose X_b = Q @ R
+        # R maybe singular, so we use try-except to handle it
         QTy = Q.T @ y  # Project y onto Q's orthogonal basis
-        return solve_triangular(R, QTy)  # Solve R @ coef = Q^T y
+        try:
+            return solve_triangular(R, QTy)  # Solve R @ coef = Q^T y
+        except np.linalg.LinAlgError:
+            # Fallback to pseudoinverse if singular (should rarely happen with L2 reg)
+            return np.linalg.lstsq(R, QTy, rcond=None)[0]
 
 
     def fit(self, X, y):
@@ -121,6 +126,12 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         # if self.sq_grad_avg is None:
         #     self.sq_grad_avg = 0.0
         # Reset velocity and sq_grad_avg to None to force reinitialization
+        self.mse_history = []
+        self.loss_history = [] 
+        self.val_mse_history = []
+        self.val_loss_history = []
+        self.loss_mape_history = []
+
         self.velocity = None
         self.sq_grad_avg = None
 
@@ -184,6 +195,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
             # self.coef_ -= self.lr * velocity
 
             self.coef_ -= self.velocity
+            self.coef_history.append(self.coef_.copy())
 
             if self.newton:
                 self.newton_step(X_b, y)
@@ -193,8 +205,9 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
                 + self.alpha * self.coef_
                 + self.l1_ratio * np.sign(self.coef_)
             )
+            # print('The shape of the gradient: ',self.gradients_gd.shape)
             self.grad_history.append(self.gradients_gd)
-            self.coef_history.append(self.coef_)
+            
             # Track validation loss
             if X_val is not None and y_val is not None:
                 val_pred =  X_val @ self.coef_
@@ -305,7 +318,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
             self.mse_history.append(mse)
             self.loss_history.append(loss)
             self.grad_history.append(self.gradients_sgd)
-            self.coef_history.append(self.coef_)
+            self.coef_history.append(self.coef_.copy())
 
         self.intercept_ = self.coef_[0]
         self.coef_ = self.coef_[1:]
@@ -489,6 +502,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         # Restore original parameters if optimization fails
         if not result.success:
             self.__dict__.update(original_params)
+            print(f"Optimization failed")
             return original_params
 
         # Update with optimized parameters
@@ -503,6 +517,10 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
             optimized_params
         )  # Update model parameters after optimization (No need to reinitialize)
         # print(f"Optimized parameters for {n_iter} iterations, { {k: self.__dict__[k] for k in list(self.__dict__.keys())[:8]} }") #list(self.__dict__.items())[:8]
+        if optimized_params != original_params:
+            print('Optimization successful')
+        else:
+            print('Optimization failed, parameters are not changed')
         return optimized_params
 
 

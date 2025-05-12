@@ -9,7 +9,7 @@
 [![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/Jamie1377/STA410)
 
 </div>  
-  
+   
 ## Overview  
   
 This is a comprehensive Python package for stock price prediction that combines statistical time series analysis with advanced machine learning techniques. The system integrates traditional forecasting methods with gradient boosting models and Hidden Markov Models to provide accurate stock price predictions.  

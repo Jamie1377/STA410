@@ -420,7 +420,7 @@ class StockPredictor:
         nasdaq_tickers_list = [stock['symbol'] for stock in nasdaq_tickers]
         sp500_tickers_list = [stock['symbol'] for stock in sp500_tickers]
         nasdaq_and_top_tech_tickers = list(set(nasdaq_tickers_list + technology_sector))
-        table = yf.download(nasdaq_and_top_tech_tickers, start=start_date, end=end_date, interval="1d", group_by='tickers', auto_adjust=True, prepost=True, threads=True, proxy=None, timeout=3)
+        table = yf.download(nasdaq_and_top_tech_tickers, start=start_date, end=end_date, interval="1d", group_by='tickers')
         hqm_df = pd.DataFrame(np.zeros((len(table.columns)//5, 5)), columns=['Symbol', 'Diff_21', 'Diff_42', 'Diff_63', 'HQM_Score'])
         i = 0
         for sym, col in (table.columns):
@@ -1059,9 +1059,9 @@ class StockPredictor:
             # Make decision
             # if market today is bullish, then we lower the score needed to buy and increase the score needed to sell
             if open_price < current_price[0]:
-                decision = "BUY" if score >= 3 else "SELL" if score <= 1 else "HOLD"
+                decision = "BUY" if score >= 3 else "SELL" if score <= 2 else "HOLD"
             else:
-                decision = "SELL" if score >= 3.5 else "BUY" if score <= 1.5 else "HOLD"
+                decision = "SELL" if score >= 3.5 else "BUY" if score <= 1 else "HOLD"
             
             # Add risk check
             position_size = self._calculate_position_size()

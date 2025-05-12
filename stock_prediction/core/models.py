@@ -10,7 +10,7 @@ from scipy.optimize import minimize
 from scipy.optimize import minimize
 from scipy.linalg import block_diag
 from scipy.linalg import solve_triangular
-
+from statistics import mode 
 # Boosting Models
 from xgboost import XGBRegressor
 from lightgbm import LGBMRegressor
@@ -102,15 +102,23 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
 
     
     def _qr_initialization(self, X_b, y):
-        """Compute initial coefficients using QR decomposition."""
+        """Compute initial coefficients (not intercept) using QR decomposition."""
         Q, R = np.linalg.qr(X_b)  # Decompose X_b = Q @ R
         # R maybe singular, so we use try-except to handle it
         QTy = Q.T @ y  # Project y onto Q's orthogonal basis
+        
         try:
+            print("Using QR decomposition for initialization")
             return solve_triangular(R, QTy)  # Solve R @ coef = Q^T y
+        
         except np.linalg.LinAlgError:
-            # Fallback to pseudoinverse if singular (should rarely happen with L2 reg)
-            return np.linalg.lstsq(R, QTy, rcond=None)[0]
+            # Handle singular matrix case
+            print("Matrix is singular, using pseudoinverse")
+            # SVD
+            U, S, Vt = np.linalg.svd(R)
+            S_inv = np.zeros_like(R)
+            S_inv[:len(S), :len(S)] = np.diag(1 / S)
+            return Vt.T @ S_inv @ U.T @ QTy  # Pseudoinverse solution
 
 
     def fit(self, X, y):
@@ -158,7 +166,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         # self.coef_ = np.zeros(n_features)
         # self.coef_ = np.random.randn(n_features) * 0.01  # Initialize with small random values
         self.coef_ = self._qr_initialization(X_b, y)
-        self.intercept_ = np.mean(y)
+        self.intercept_ = mode(y)
         self.coef_[0] = self.intercept_  # Set intercept to the first coefficient
 
         # Initialize velocity and sq_grad_avg as zero vectors

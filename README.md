@@ -74,11 +74,11 @@ The package features a custom `GradientDescentRegressor` that outperforms scikit
 
 #### Performance Advantages
 
-<img src="stock_prediction/docs/SGD_Comparison_Test_1.png"   width=50% height=100%><img src="stock_prediction/docs/SGD_Comparison_Test_2.png" width=50% height=100%><figcaption>Plots of **testing** data</figcaption>
+<img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Test_1.png"   width=50% height=100%><img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Test_2.png" width=50% height=100%><figcaption>Plots of **testing** data</figcaption>
 
 <br>
 
-<img src="stock_prediction/docs/SGD_Comparison_Train_1.png" width=50% height=60%><img src="stock_prediction/docs/SGD_Comparison_Train_2.png" width=50% height=60%><figcaption>Plots of **training** data</figcaption>
+<img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Train_1.png" width=50% height=60%><img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Train_2.png" width=50% height=60%><figcaption>Plots of **training** data</figcaption>
 
 
 

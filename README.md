@@ -63,6 +63,44 @@ The system automatically calculates numerous technical indicators:
 - Volatility measures (Bollinger Bands, ATR)
 - Volume indicators and external economic data
 
+### Custom Gradient Descent Implementation
+
+
+The package features a custom `GradientDescentRegressor` that outperforms scikit-learn's standard `SGDRegressor` in several important ways:
+
+
+[(Here is the link to the complete notebook of the comparison.)](/Users/jamie/Downloads/ml/STA410_Package/stock_prediction/docs/SGD_Comparison_Viz.ipynb)
+
+
+#### Performance Advantages
+
+<img src="stock_prediction/docs/SGD_Comparison_Test_1.png"   width=50% height=100%><img src="stock_prediction/docs/SGD_Comparison_Test_2.png" width=50% height=100%><figcaption>Plots of **testing** data</figcaption>
+
+<br>
+
+<img src="stock_prediction/docs/SGD_Comparison_Train_1.png" width=50% height=60%><img src="stock_prediction/docs/SGD_Comparison_Train_2.png" width=50% height=60%><figcaption>Plots of **training** data</figcaption>
+
+
+
+
+As demonstrated in our benchmark tests:
+
+- **Superior Convergence**: Our implementation achieves lower MSE in both training and testing datasets
+- **Faster Optimization**: Reaches optimal performance in fewer iterations
+- **Better Generalization**: Maintains consistent performance on unseen data
+
+#### Key Technical Innovations
+
+1. **Advanced Initialization**: Uses **QR decomposition** to determine optimal starting coefficients, dramatically improving convergence speed compared to random or zero initialization
+
+2. **Momentum Optimization**: Implements configurable momentum with RMSProp option to escape local minima and smooth gradient updates
+
+3. **Hybrid Regularization**: Combines L1 and L2 penalties with independent control, providing better model generalization for financial time series
+
+4. **Domain-Specific Loss Functions**: Incorporates directional accuracy into optimization objectives, recognizing that predicting price movement direction is often more important than exact values in financial markets
+
+Our implementation is particularly effective for financial time series data, where traditional ML approaches often struggle with the non-stationary nature of the data.
+
 ## Advanced Usage
 For more detailed examples, see the example usage script.
 
@@ -110,7 +148,7 @@ stock_prediction/
 ```
 
 ## Contributing
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request or fork.
 
 ## Authors
 Yue Yu (Undergraduate student at the University of Toronto)

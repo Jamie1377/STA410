@@ -69,16 +69,17 @@ The system automatically calculates numerous technical indicators:
 The package features a custom `GradientDescentRegressor` that outperforms scikit-learn's standard `SGDRegressor` in several important ways:
 
 
-[(Here is the link to the complete notebook of the comparison.)](/Users/jamie/Downloads/ml/STA410_Package/stock_prediction/docs/SGD_Comparison_Viz.ipynb)
+[(Here is the link to the complete notebook of the comparison.)](https://github.com/Jamie1377/STA410/blob/main/stock_prediction/docs/SGD_Comparison_Viz.ipynb)
 
 
 #### Performance Advantages
 
-<img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Test_1.png"   width=50% height=100%><img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Test_2.png" width=50% height=100%><figcaption>Plots of **testing** data</figcaption>
+<img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Test_1.png"   width=50% height=100%><img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Test_2.png" width=50% height=100%><figcaption><strong>Testing Performance:</strong> Our custom implementation consistently achieves lower MSE across time horizons after few iterations</figcaption>
 
 <br>
 
-<img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Train_1.png" width=50% height=60%><img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Train_2.png" width=50% height=60%><figcaption>Plots of **training** data</figcaption>
+<img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Train_1.png" width=50% height=60%><img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Train_2.png" width=50% height=60%><figcaption><strong>Training Convergence:</strong> Faster and more stable optimization compared to sklearn's SGDRegressor</figcaption>
+
 
 
 

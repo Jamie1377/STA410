@@ -9,6 +9,7 @@ stock_prediction/core/models.py
 stock_prediction/core/predictor.py
 stock_prediction/utils/__init__.py
 stock_prediction/utils/analysis.py
+stock_prediction/utils/filter_script.py
 stock_prediction/utils/preprocessing.py
 stock_prediction_STA410.egg-info/PKG-INFO
 stock_prediction_STA410.egg-info/SOURCES.txt

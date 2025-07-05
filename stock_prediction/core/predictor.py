@@ -51,36 +51,44 @@ trade_api_wss = None
 data_api_url = None
 stream_data_wss = None
 
-# Alpaca API imports
+# Alpaca API imports - make optional
 import os
 import requests
-from alpaca.trading.client import TradingClient
-from alpaca.trading.requests import (
-    MarketOrderRequest,
-    LimitOrderRequest,
-    StopLimitOrderRequest,
-    StopLossRequest,
-    TakeProfitRequest,
-    GetOrdersRequest,
-    ClosePositionRequest
+try:
+    from alpaca.trading.client import TradingClient
+    from alpaca.trading.requests import (
+        MarketOrderRequest,
+        LimitOrderRequest,
+        StopLimitOrderRequest,
+        StopLossRequest,
+        TakeProfitRequest,
+        GetOrdersRequest,
+        ClosePositionRequest
+    )
+    from alpaca.trading.enums import (
+        OrderSide,
+        TimeInForce,
+        OrderType,
+        OrderClass,
+        QueryOrderStatus,
+    )
+    from alpaca.data.historical import StockHistoricalDataClient, CryptoHistoricalDataClient
+    from alpaca.data.requests import StockLatestTradeRequest, CryptoLatestTradeRequest
+    ALPACA_AVAILABLE = True
+except ImportError:
+    # Use alpaca_trade_api as fallback or disable alpaca functionality
+    ALPACA_AVAILABLE = False
+    print("Alpaca trading API not available. Some features may be disabled.")
 
-    
-)
-from alpaca.trading.enums import (
-    OrderSide,
-    TimeInForce,
-    OrderType,
-    OrderClass,
-    QueryOrderStatus,
-)
-from alpaca.trading.enums import OrderSide, TimeInForce
-from alpaca.data.historical import StockHistoricalDataClient, CryptoHistoricalDataClient
-from alpaca.data.requests import StockLatestTradeRequest, CryptoLatestTradeRequest
 
-
-data_client = StockHistoricalDataClient(api_key='PK8Z3VDFBGIPX2O8MN0R', secret_key='Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE')
-crypto_data_client = CryptoHistoricalDataClient(api_key='PK8Z3VDFBGIPX2O8MN0R', secret_key='Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE')
-trading_client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
+if ALPACA_AVAILABLE:
+    data_client = StockHistoricalDataClient(api_key='PK8Z3VDFBGIPX2O8MN0R', secret_key='Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE')
+    crypto_data_client = CryptoHistoricalDataClient(api_key='PK8Z3VDFBGIPX2O8MN0R', secret_key='Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE')
+    trading_client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
+else:
+    data_client = None
+    crypto_data_client = None
+    trading_client = None
 
 
 class MarketSentimentAnalyzer:  # Compuationally expensive, try to use volatility to replace the sentiment

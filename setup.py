@@ -26,7 +26,7 @@ setup(
         'schedule',
         'alpaca_trade_api',
         'alpaca',
-        'pyticksymbols',
+        'pytickersymbols',
         ],
     # packages=find_packages(exclude=['model_cache', 'tests']),
     exclude_package_data={

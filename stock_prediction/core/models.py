@@ -32,7 +32,8 @@ from statsforecast.utils import AirPassengersDF
 # Suppress warnings
 import warnings
 from scipy.optimize import OptimizeWarning
-
+import pandas as pd
+import numpy as np
 # Custom Gradient Descent Implementations
 class GradientDescentRegressor(BaseEstimator, RegressorMixin):
     """Custom GD implementation with momentum and adaptive learning
@@ -108,12 +109,12 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         QTy = Q.T @ y  # Project y onto Q's orthogonal basis
         
         try:
-            print("Using QR decomposition for initialization")
+            # print("Using QR decomposition for initialization")
             return solve_triangular(R, QTy)  # Solve R @ coef = Q^T y
         
         except np.linalg.LinAlgError:
             # Handle singular matrix case
-            print("Matrix is singular, using pseudoinverse")
+            # print("Matrix is singular, using pseudoinverse")
             # SVD
             U, S, Vt = np.linalg.svd(R)
             S_inv = np.zeros_like(R)
@@ -121,7 +122,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
             return Vt.T @ S_inv @ U.T @ QTy  # Pseudoinverse solution
 
 
-    def fit(self, X, y):
+    def fit(self, X, y, X_val=None, y_val=None):
         """Fit the model using GD or SGD
 
         Parameters:
@@ -146,7 +147,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         if self.batch_size and self.batch_size < X.shape[0]:
             self._fit_sgd(X, y)
         else:
-            self._fit_gd(X, y)
+            self._fit_gd(X, y, X_val, y_val)
         return self
 
     def _fit_gd(self, X, y, X_val=None, y_val=None):
@@ -173,6 +174,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         self.velocity = np.zeros(n_features)
         self.sq_grad_avg = np.zeros(n_features)
         
+        tol = 0
         for _ in range(self.n_iter):
             # Compute gradients from the loss function (2 is from the square)
             self.gradients_gd = 2 / n_samples * X_b.T @ (X_b @ self.coef_ - y)
@@ -249,6 +251,16 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
                             f"Early stopping at iteration {_} with validation loss: {val_loss:.4f}"
                         )
                         break
+                potential_stop_idx =  np.argmin(pd.Series(self.val_mse_history).diff().dropna().values) if len(pd.Series(self.val_mse_history).diff().dropna().values) > 0 else 0
+                if potential_stop_idx > 0 and self.val_mse_history[potential_stop_idx] < self.val_mse_history[_]:
+                    tol += 1
+                if tol > 10:
+                    print(
+                        f"Early stopping at iteration {_} with validation loss (MSE): {self.val_mse_history[potential_stop_idx]:.4f}"
+                    )
+                    break
+
+                
                 else:
                     if loss_mape < 0.01:
                         print(

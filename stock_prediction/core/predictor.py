@@ -42,8 +42,8 @@ import hashlib
 import joblib
 
 # API imports
-api_key = "PK8Z3VDFBGIPX2O8MN0R"
-secret_key = "Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE"
+api_key = "PKXPBKCIK15IBA4G84P4"
+secret_key = "aJHuDphvn8S6M69F0Vrc0EAudEgob2xc5ltXc0bA"
 paper = True
 # DO not change this
 trade_api_url = None
@@ -82,8 +82,11 @@ except ImportError:
 
 
 if ALPACA_AVAILABLE:
-    data_client = StockHistoricalDataClient(api_key='PK8Z3VDFBGIPX2O8MN0R', secret_key='Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE')
-    crypto_data_client = CryptoHistoricalDataClient(api_key='PK8Z3VDFBGIPX2O8MN0R', secret_key='Uxg8gU75j18eM2GjFKv21kR7761hNKdvyWwc0qHE')
+
+    api_key = pd.read_json("API_KEYs.json",orient="index").iloc[0].values[0]
+    secret_key = pd.read_json("API_KEYs.json",orient="index").iloc[1].values[0]
+    data_client = StockHistoricalDataClient(api_key=api_key, secret_key=secret_key)
+    crypto_data_client = CryptoHistoricalDataClient(api_key=api_key, secret_key=secret_key)
     trading_client = TradingClient(api_key=api_key, secret_key=secret_key, paper=True)
 else:
     data_client = None
@@ -186,7 +189,7 @@ class StockPredictor:
             "stop_loss_pct": 0.03,  # 3% trailing stop
             "take_profit_pct": 0.003,  # 1.5% take profit
             "max_sector_exposure": 0.4,  # 40% max energy sector exposure
-            "daily_loss_limit": -0.03,  # -3% daily loss threshold
+            "daily_loss_limit": -0.2,  # -3% daily loss threshold
         }
         self.api = trading_client
         self.data_client = data_client
@@ -1044,6 +1047,104 @@ class StockPredictor:
                     'weight': 1
                 },
             }
+             
+            # signals = {
+            #     "trend": {
+            #         "value": (
+            #             float(current_price)
+            #             > float(predictor.data["Close"].rolling(50).mean().iloc[-1])
+            #             if "MA_50" not in predictor.data.columns
+            #             else float(current_price) > float(second_last_row["MA_50"])
+            #         ),
+            #         "weight": 0.1,
+            #     },
+            #     "mean_reversion": {
+            #         "value": predictor.data["RSI"].iloc[-1] < 30,  # Oversold condition
+            #         "weight": 1.0,
+            #     },
+            #     "volatility_breakout": {
+            #         "value": predictor.data["ATR"].iloc[-1]
+            #         > predictor.data["ATR"].rolling(20).mean().iloc[-1] * 1.5,
+            #         "weight": 0.8,
+            #     },
+            #     "volume_spike": {
+            #         "value": predictor.data["Volume"].iloc[-1]
+            #         > predictor.data["Volume"].rolling(20).mean().iloc[-1] * 2,
+            #         "weight": 0.7,
+            #     },
+            #     "support_resistance": {
+            #         "value": abs(current_price - predictor.data["MA_50"].iloc[-1])
+            #         / current_price
+            #         < 0.01,  # Price near MA50
+            #         "weight": 1.2,
+            #     },
+            #     "momentum": {
+            #         "value": (
+            #             float(last_row.get("RSI", 0)) < 65
+            #             if "RSI" in predictor.data.columns
+            #             else True
+            #         ),
+            #         "weight": 0.5,
+            #     },
+            #     "volume": {
+            #         "value": (
+            #             float(last_row.get("Volume", 0))
+            #             > float(predictor.data["Volume"].rolling(20).mean().iloc[-1])
+            #             if "Volume" in predictor.data.columns
+            #             else True
+            #         ),
+            #         "weight": 0.5,
+            #     },
+            #     "volatility": {
+            #         "value": (
+            #             float(last_row.get("ATR", 0))
+            #             > float(predictor.data["ATR"].rolling(14).mean().iloc[-1])
+            #             if "ATR" in predictor.data.columns
+            #             else True
+            #         ),
+            #         "weight": 1,
+            #     },
+            # }
+
+            # # Add optional signals only if the columns exist
+            # if "Lower_Bollinger" in predictor.data.columns and "ATR" in predictor.data.columns:
+            #     signals["mean_reversion"] = {
+            #         "value": current_price
+            #         < last_row["Lower_Bollinger"] + 0.2 * last_row["ATR"],
+            #         "weight": 0.5,
+            #     }
+
+            # if "SP500" in predictor.data.columns:
+            #     signals["market_picture_increase"] = {
+            #         "value": (second_last_row["SP500"] < last_row["SP500"]),
+            #         "weight": 1,
+            #     }
+
+            # if "Tech" in predictor.data.columns:
+            #     signals["sector_picture_increase"] = {
+            #         "value": (second_last_row["Tech"] < last_row["Tech"]),
+            #         "weight": 1,
+            #     }
+
+            # # Encourage Sell
+            # signals["overbought"] = {
+            #     "value": predictor.data["RSI"].iloc[-1] > 70,  # Overbought condition
+            #     "weight": 1.2,  # Higher weight to encourage selling
+            # }
+
+            # signals["price_resistance"] = {
+            #     "value": abs(current_price - predictor.data["Upper_Bollinger"].iloc[-1])
+            #     / current_price
+            #     < 0.01,
+            #     "weight": 1.0,
+            # }
+
+            # signals["profit_taking"] = {
+            #     "value": current_price
+            #     > predictor.data["MA_50"].iloc[-1] * 1.1,  # 10% above MA50
+            #     "weight": 0.8,
+            # }
+
             
             # Calculate score (0-5 scale)
             score = sum(condition['weight'] for name, condition in signals.items() if condition['value'].all() == True)
@@ -1099,20 +1200,392 @@ class StockPredictor:
 
 
 
+    # def load_data(self):
+    #     """Load and prepare stock data with features"""
+    #     # Add momentum-specific features
+    #     window = 15  # Standard momentum window
+    #     self.data = yf.download(
+    #         self.symbol,
+    #         start=self.start_date,
+    #         end=self.end_date,
+    #         interval=self.interval,
+    #     )
+    #     self.data.columns = self.data.columns.get_level_values(0)  # Remove multi-index
+    #     self.data.ffill()
+    #     self.data.dropna()
+
+    #     ### 1. Add rolling indicators
+    #     self.data["MA_50"] = self.data["Close"].rolling(window=50).mean()
+    #     self.data["MA_200"] = self.data["Close"].rolling(window=200).mean()
+    #     self.data["MA_7"] = self.data["Close"].rolling(window=7).mean()
+    #     self.data["MA_21"] = self.data["Close"].rolling(window=21).mean()
+
+    #     ### 2. Fourier transform
+    #     # data_FT = self.data.copy().reset_index()[["Date", "Close"]]
+    #     # close_fft = np.fft.fft(np.asarray(data_FT["Close"].tolist()))
+    #     # self.data["FT_real"] = np.real(close_fft)
+    #     # self.data["FT_img"] = np.imag(close_fft)
+
+    #     # # Fourier Transformation is not used
+    #     # fft_df = pd.DataFrame({'fft': close_fft})
+    #     # fft_df['absolute'] = fft_df['fft'].apply(lambda x: np.abs(x))
+    #     # fft_df['angle'] = fft_df['fft'].apply(lambda x: np.angle(x))
+    #     # fft_list = np.asarray(fft_df['fft'].tolist())
+    #     # for num_ in [3, 6, 9, 100]:
+    #     #     fft_list_m10 = np.copy(fft_list)
+    #     #     fft_list_m10[num_:-num_] = 0
+    #     #     complex_num = np.fft.ifft(fft_list_m10)
+    #     #     self.data[f'Fourier_trans_{num_}_comp_real'] = np.real(complex_num)
+    #     #     self.data[f'Fourier_trans_{num_}_comp_img'] = np.imag(complex_num)
+
+    #     # ### Fourier Transformation PCA
+    #     # X_fft = np.column_stack([np.real(close_fft), np.imag(close_fft)])
+    #     # pca = PCA(n_components=2)  # Keep top 2 components
+    #     # X_pca = pca.fit_transform(X_fft)
+    #     # for i in range(X_pca.shape[1]):
+    #     #     self.data[f"Fourier_PCA_{i}"] = X_pca[:, i]
+
+    #     ### 3. Add rolling statistics
+    #     self.data["rolling_std"] = self.data["Close"].rolling(window=50).std()
+    #     self.data["rolling_min"] = self.data["Close"].rolling(window=50).min()
+    #     # self.data['rolling_max'] = self.data['Close'].rolling(window=window).max()
+    #     self.data["rolling_median"] = self.data["Close"].rolling(window=50).median()
+    #     self.data["rolling_sum"] = self.data["Close"].rolling(window=50).sum()
+    #     self.data["rolling_var"] = self.data["Close"].rolling(window=50).var()
+    #     self.data["rolling_ema"] = (
+    #         self.data["Close"].ewm(span=50, adjust=False).mean()
+    #     )  # Exponential Moving Average
+    #     # Add rolling quantiles (25th and 75th percentiles)
+    #     self.data["rolling_25p"] = self.data["Close"].rolling(window=50).quantile(0.25)
+    #     self.data["rolling_75p"] = self.data["Close"].rolling(window=50).quantile(0.75)
+    #     # Drop rows with NaN values (due to rolling window)
+    #     self.data.dropna(inplace=True)
+    #     stock_data.index.name = "Date"  # Ensure the index is named "Date"
+
+    #     ### 4. Advanced Momentum
+    #     self.data["RSI"] = self._compute_rsi(window=14)
+    #     self.data["MACD"] = (
+    #         self.data["Close"].ewm(span=12).mean()
+    #         - self.data["Close"].ewm(span=26).mean()
+    #     )
+    #     ### 5. Williams %R
+    #     high_max = self.data["High"].rolling(window).max()
+    #     low_min = self.data["Low"].rolling(window).min()
+    #     self.data["Williams_%R"] = (
+    #         (high_max - self.data["Close"]) / (high_max - low_min)
+    #     ) * -100
+
+    #     ### 6. Stochastic Oscillator
+    #     self.data["Stochastic_%K"] = (
+    #         (self.data["Close"] - low_min) / (high_max - low_min)
+    #     ) * 100
+    #     self.data["Stochastic_%D"] = self.data["Stochastic_%K"].rolling(3).mean()
+
+    #     ### 7. Momentum Divergence Detection
+    #     self.data["Price_Change"] = self.data["Close"].diff()
+    #     self.data["Momentum_Divergence"] = (
+    #         (self.data["Price_Change"] * self.data["MACD"].diff()).rolling(5).sum()
+    #     )
+
+    #     ### 8. Volatility-adjusted Channels
+    #     self.data["ATR"] = self._compute_atr(window=14)
+    #     self.data["Upper_Bollinger"] = (
+    #         self.data["MA_21"] + 2 * self.data["Close"].rolling(50).std()
+    #     )
+    #     self.data["Lower_Bollinger"] = (
+    #         self.data["MA_21"] - 2 * self.data["Close"].rolling(50).std()
+    #     )
+
+    #     ### 9. Volume-based Features
+    #     # self.data['OBV'] = self._compute_obv()
+    #     if self.data["Volume"].cumsum()[-1] != 0:
+    #         self.data["VWAP"] = (
+    #             self.data["Volume"]
+    #             * (self.data["High"] + self.data["Low"] + self.data["Close"])
+    #             / 3
+    #         ).cumsum() / self.data["Volume"].cumsum()
+
+    #     ### 10. Economic Indicators
+    #     # sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date, interval=self.interval,)["Close"]
+    #     # # Fetch S&P 500 Index (GSPC) and Treasury Yield ETF (IEF) from Yahoo Finance
+    #     # sp500 = sp500 - sp500.mean()
+    #     # tnx = yf.download(
+    #     #     "^TNX", start=self.start_date, end=self.end_date, interval=self.interval
+    #     # )["Close"]
+    #     # tnx_len = len(tnx)
+    #     # treasury_yield = yf.download(
+    #     #     "IEF", start=self.start_date, end=self.end_date, interval=self.interval
+    #     # )["Close"]
+    #     # exchange_rate = yf.download(
+    #     #     "USDCAD=X", start=self.start_date, end=self.end_date, interval=self.interval
+    #     # )["Close"]
+    #     # technology_sector = yf.download(
+    #     #     "XLK", start=self.start_date, end=self.end_date, interval=self.interval
+    #     # )["Close"]
+    #     # financials_sector = yf.download(
+    #     #     "XLF", start=self.start_date, end=self.end_date, interval=self.interval
+    #     # )["Close"]
+    #     # energy_sector = yf.download(
+    #     #     "XLE", start=self.start_date, end=self.end_date, interval=self.interval
+    #     # )["Close"]
+    #     # vix = yf.download(
+    #     #     "^VIX", start=self.start_date, end=self.end_date, interval=self.interval
+    #     # )["Close"]
+
+    #     # self.data["SP500"] = sp500
+    #     # self.data["TNX"] = tnx
+    #     # self.data["Treasury_Yield"] = treasury_yield
+    #     # self.data["USDCAD=X"] = exchange_rate
+    #     # self.data["Tech"] = technology_sector
+    #     # self.data["Fin"] = financials_sector
+    #     # self.data["VIX"] = vix
+    #     # self.data["Energy"] = energy_sector
+
+    #      # Batch download all economic indicators at once
+    #     economic_tickers = ["^GSPC", "^TNX", "IEF", "USDCAD=X", "XLK", "XLF", "XLE", "^VIX"]
+    #     economic_data = yf.download(
+    #         economic_tickers,
+    #         start=self.start_date, 
+    #         end=self.end_date,
+    #         interval=self.interval,
+    #         group_by='ticker',  # Group results by ticker
+    #         auto_adjust=True,   # Auto-adjust data
+    #         progress=False      # Disable progress bar
+    #     )
+
+    #     # Extract each indicator from the batched data
+    #     try:
+    #         sp500 = economic_data['^GSPC']['Close'] - economic_data['^GSPC']['Close'].mean()
+    #         tnx = economic_data['^TNX']['Close']
+    #         tnx_len = len(tnx)
+    #         treasury_yield = economic_data['IEF']['Close'] 
+    #         exchange_rate = economic_data['USDCAD=X']['Close']
+    #         technology_sector = economic_data['XLK']['Close']
+    #         financials_sector = economic_data['XLF']['Close']
+    #         energy_sector = economic_data['XLE']['Close']
+    #         vix = economic_data['^VIX']['Close']
+            
+    #         # Additional defensive code to handle missing data
+    #         for series_name, series in [
+    #             ("TNX", tnx), 
+    #             ("Treasury_Yield", treasury_yield),
+    #             ("Exchange Rate", exchange_rate),
+    #             ("Technology Sector", technology_sector),
+    #             ("Financial Sector", financials_sector),
+    #             ("Energy Sector", energy_sector),
+    #             ("VIX", vix)
+    #         ]:
+    #             if series.empty:
+    #                 print(f"Warning: {series_name} data is empty, filling with zeros")
+    #                 if series_name == "TNX":
+    #                     tnx = pd.Series(0, index=self.data.index)
+    #                     tnx_len = 0
+    #     except KeyError as e:
+    #         print(f"Warning: One or more economic indicators missing: {e}")
+    #         # Provide fallback values or skip the missing indicators
+
+
+
+    #     economic_data = (
+    #         pd.concat(
+    #             [
+    #                 sp500,
+    #                 tnx,
+    #                 treasury_yield,
+    #                 exchange_rate,
+    #                 technology_sector,
+    #                 financials_sector,
+    #                 vix,
+    #                 energy_sector,
+    #             ],
+    #             axis=1,
+    #             keys=[
+    #                 "SP500",
+    #                 "TNX",
+    #                 "Treasury_Yield",
+    #                 "USDCAD=X",
+    #                 "Tech",
+    #                 "Fin",
+    #                 "VIX",
+    #                 "Energy",
+    #             ],
+    #         )
+    #         .reset_index()
+    #         .rename(columns={"index": "Date"})
+    #         # .dropna()
+    #     )
+    #     economic_data.columns = economic_data.columns.get_level_values(0)
+    #     if self.interval == "1m":
+
+    #         economic_data["Datetime"] = pd.to_datetime(economic_data["Datetime"])
+    #         economic_data.set_index("Datetime", inplace=True)
+    #     else:
+    #         economic_data["Date"] = pd.to_datetime(economic_data["Date"])
+    #         economic_data.set_index("Date", inplace=True)
+        
+    #     # Issue of Yfinance API of USDCAD=X
+    #     # Fill missing values with the mean
+    #     economic_data["USDCAD=X"] = economic_data["USDCAD=X"].fillna(
+    #         economic_data["USDCAD=X"].mean()
+    #     )
+
+    #     # 11. Whether the next or previous day is a non-trading day
+    #     # nyse = mcal.get_calendar("NYSE")
+    #     # schedule = nyse.schedule(start_date=self.start_date, end_date=self.end_date)
+    #     # economic_data["is_next_non_trading_day"] = economic_data.index.shift(
+    #     #     -1, freq="1d"
+    #     # ).isin(schedule.index).astype(int) + economic_data.index.shift(
+    #     #     1, freq="1d"
+    #     # ).isin(
+    #     #     schedule.index
+    #     # ).astype(
+    #     #     int
+    #     # )
+
+    #     # Merge with stock data
+    #     if tnx_len < len(self.data):
+    #         economic_data = economic_data.drop(columns='TNX')
+    #     if self.interval == "1m":
+    #         self.data = pd.merge(self.data, economic_data, on="Datetime", how="left")
+    #     else:
+    #         self.data = pd.merge(self.data, economic_data, on="Date", how="left")
+
+    #     ### 12. Volatility and Momentum
+    #     # self.data["Daily Returns"] = self.data["Close"].pct_change() # Percentage change
+    #     self.data["Daily Returns"] = (
+    #         self.data["Close"].pct_change(window) * 100
+    #     )  # Percentage change in the standard window for the momentum
+    #     self.data["Volatility"] = self.data["Daily Returns"].rolling(window=20).std()
+    #     # Adaptive Momentum Score
+    #     vol_weight = self.data["Volatility"] * 100
+    #     self.data["Momentum_Score"] = (
+    #         self.data["RSI"] * 0.4
+    #         + self.data["Daily Returns"] * 0.3
+    #         + self.data["Williams_%R"] * 0.3
+    #     ) / (1 + vol_weight)
+    #     # Drop rows with NaN values
+    #     self.data["Momentum_Interaction"] = (
+    #         self.data["RSI"] * self.data["Daily Returns"]
+    #     )
+    #     self.data["Volatility_Adj_Momentum"] = self.data["Momentum_Score"] / (
+    #         1 + self.data["Volatility"]
+    #     )
+    #     self.data["Volatility_Adj_Momentum"] = self.data[
+    #         "Volatility_Adj_Momentum"
+    #     ].clip(lower=0.1)
+    #     self.data["Volatility_Adj_Momentum"] = self.data[
+    #         "Volatility_Adj_Momentum"
+    #     ].clip(upper=10.0)
+    #     self.data["Volatility_Adj_Momentum"] = self.data[
+    #         "Volatility_Adj_Momentum"
+    #     ].fillna(0.0)
+
+    #     ### 13. Market Regime Detection by HMM
+    #     # hmm = GaussianHMM(n_components=3, covariance_type="diag", n_iter=100, random_state=42)
+    #     # hmm.fit(self.data["Close"].pct_change().dropna().values.reshape(-1, 1))
+    #     # # Predict hidden states
+    #     # market_state = hmm.predict(
+    #     #     self.data["Close"].pct_change().dropna().values.reshape(-1, 1)
+    #     # )
+    #     # hmm_sp = GaussianHMM(n_components=3, covariance_type="diag", n_iter=100, random_state=42)
+    #     # hmm_sp.fit(self.data["SP500"].pct_change().dropna().values.reshape(-1, 1))
+    #     # market_state_sp500 = hmm_sp.predict(
+    #     #     self.data["SP500"].pct_change().dropna().values.reshape(-1, 1)
+    #     # )
+    #     # # Initialize the Market_State column
+    #     # self.data["Market_State"] = np.zeros(len(self.data))
+    #     # if (
+    #     #     len(set(list(market_state))) != 1
+    #     #     and len(set(list(market_state_sp500))) != 1
+    #     # ):
+    #     #     self.data["Market_State"][0] = 0
+    #     #     self.data.iloc[1:]["Market_State"] = market_state + market_state_sp500
+
+    #     # ### 14. Sentiment Analysis (Computationally expensive)
+    #     # self.data["Market_Sentiment"] = 0.0
+    #     # sentimement = MarketSentimentAnalyzer().get_historical_sentiment(
+    #     #     self.symbol, self.data.shape[0]
+    #     # )
+    #     # self.data["Market_Sentiment"] = sentimement
+
+    #     # Final cleaning
+    #     # convert timezone to AMErican/New_York
+    #     if self.interval == "1m":
+    #         self.data.index = self.data.index.tz_convert("America/New_York")
+    #     self.data = self.data.dropna()
+    #     if len(self.data) < 50:
+    #         print("Not enough data to train the model.")
+    #         raise ValueError("Not enough data to train the model.")
+
+    #     return self
     def load_data(self):
         """Load and prepare stock data with features"""
-        # Add momentum-specific features
         window = 15  # Standard momentum window
-        self.data = yf.download(
-            self.symbol,
-            start=self.start_date,
-            end=self.end_date,
-            interval=self.interval,
-        )
-        self.data.columns = self.data.columns.get_level_values(0)  # Remove multi-index
-        self.data.ffill()
-        self.data.dropna()
+        
+        # Check if this is a cryptocurrency ticker
+        is_crypto = '-USD' in self.symbol or 'USD' in self.symbol or '/USD' in self.symbol or self.symbol.endswith('BTC')
+        
+        try: 
+            yf_symbol = self.symbol.replace("/", "-") if '/' in self.symbol else self.symbol
+            data = yf.download(
+                self.symbol,
+                start=self.start_date,
+                end=self.end_date,
+                interval=self.interval,
+                progress=False,
+            )
+            
+            if data.empty or len(data) < 5:
+                raise Exception(f"Insufficient data from Yahoo Finance for {yf_symbol}")
+                
+            data.columns = data.columns.get_level_values(0)  # Remove multi-index
+            self.data = data
+            print(f"Successfully loaded data from Yahoo Finance for {yf_symbol}")
+            
+        except Exception as e:
+            print(f"Failed to get data from Yahoo Finance for {self.symbol}: {str(e)}")
+            if is_crypto:
+                print(f"Attempting to get crypto data from Alpaca for {self.symbol}")
+                self._load_crypto_data_from_alpaca()
+            else:
+                print(f"Attempting to get stock data from Alpaca for {self.symbol}")
+                self._load_stock_data_from_alpaca()
 
+        if self.data.empty:
+            print(f"Warning: Data for {self.symbol} is empty after cleaning")
+            return self
+
+        self._add_technical_indicators(window)
+        
+        # Modularized feature loading based on asset type
+        if is_crypto:
+            # Add crypto-specific indicators
+            self._add_crypto_liquidity_indicators()
+            self._add_crypto_volatility_indicators()
+            self._add_crypto_market_structure_indicators()
+            self._add_crypto_onchain_indicators()
+        else:
+            # For stocks, use economic indicators
+            self._add_economic_indicators()
+
+        # Final cleaning
+        if self.interval in ["1m", "5m"]:
+            self.data.index = self.data.index.tz_convert("America/New_York")
+        
+        self.data = self.data.dropna(axis=1, thresh=len(self.data) * 0.1)
+        self.data = self.data.dropna()
+        
+        if len(self.data) < 50:
+            raise ValueError("Not enough data to train the model. Number of rows: {}".format(len(self.data)))
+        else:
+            print(f"Data loaded for {self.symbol} with {len(self.data)} rows.")
+
+        return self
+    
+
+      
+    def _add_technical_indicators(self, window=15):
+        """Add all technical indicators"""
         ### 1. Add rolling indicators
         self.data["MA_50"] = self.data["Close"].rolling(window=50).mean()
         self.data["MA_200"] = self.data["Close"].rolling(window=200).mean()
@@ -1159,7 +1632,7 @@ class StockPredictor:
         self.data["rolling_75p"] = self.data["Close"].rolling(window=50).quantile(0.75)
         # Drop rows with NaN values (due to rolling window)
         self.data.dropna(inplace=True)
-        stock_data.index.name = "Date"  # Ensure the index is named "Date"
+        # stock_data.index.name = "Date"  # Ensure the index is named "Date"
 
         ### 4. Advanced Momentum
         self.data["RSI"] = self._compute_rsi(window=14)
@@ -1197,92 +1670,13 @@ class StockPredictor:
 
         ### 9. Volume-based Features
         # self.data['OBV'] = self._compute_obv()
-        self.data["VWAP"] = (
-            self.data["Volume"]
-            * (self.data["High"] + self.data["Low"] + self.data["Close"])
-            / 3
-        ).cumsum() / self.data["Volume"].cumsum()
-
-        ### 10. Economic Indicators
-        sp500 = yf.download("^GSPC", start=self.start_date, end=self.end_date, interval=self.interval,)["Close"]
-        # Fetch S&P 500 Index (GSPC) and Treasury Yield ETF (IEF) from Yahoo Finance
-        sp500 = sp500 - sp500.mean()
-        tnx = yf.download(
-            "^TNX", start=self.start_date, end=self.end_date, interval=self.interval
-        )["Close"]
-        tnx_len = len(tnx)
-        treasury_yield = yf.download(
-            "IEF", start=self.start_date, end=self.end_date, interval=self.interval
-        )["Close"]
-        exchange_rate = yf.download(
-            "USDCAD=X", start=self.start_date, end=self.end_date, interval=self.interval
-        )["Close"]
-        technology_sector = yf.download(
-            "XLK", start=self.start_date, end=self.end_date, interval=self.interval
-        )["Close"]
-        financials_sector = yf.download(
-            "XLF", start=self.start_date, end=self.end_date, interval=self.interval
-        )["Close"]
-        energy_sector = yf.download(
-            "XLE", start=self.start_date, end=self.end_date, interval=self.interval
-        )["Close"]
-        vix = yf.download(
-            "^VIX", start=self.start_date, end=self.end_date, interval=self.interval
-        )["Close"]
-
-        # self.data["SP500"] = sp500
-        # self.data["TNX"] = tnx
-        # self.data["Treasury_Yield"] = treasury_yield
-        # self.data["USDCAD=X"] = exchange_rate
-        # self.data["Tech"] = technology_sector
-        # self.data["Fin"] = financials_sector
-        # self.data["VIX"] = vix
-        # self.data["Energy"] = energy_sector
-
-        economic_data = (
-            pd.concat(
-                [
-                    sp500,
-                    tnx,
-                    treasury_yield,
-                    exchange_rate,
-                    technology_sector,
-                    financials_sector,
-                    vix,
-                    energy_sector,
-                ],
-                axis=1,
-                keys=[
-                    "SP500",
-                    "TNX",
-                    "Treasury_Yield",
-                    "USDCAD=X",
-                    "Tech",
-                    "Fin",
-                    "VIX",
-                    "Energy",
-                ],
-            )
-            .reset_index()
-            .rename(columns={"index": "Date"})
-            # .dropna()
-        )
-        economic_data.columns = economic_data.columns.get_level_values(0)
-        if self.interval == "1m":
-
-            economic_data["Datetime"] = pd.to_datetime(economic_data["Datetime"])
-            economic_data.set_index("Datetime", inplace=True)
-        else:
-            economic_data["Date"] = pd.to_datetime(economic_data["Date"])
-            economic_data.set_index("Date", inplace=True)
-        
-        # Issue of Yfinance API of USDCAD=X
-        # Fill missing values with the mean
-        economic_data["USDCAD=X"] = economic_data["USDCAD=X"].fillna(
-            economic_data["USDCAD=X"].mean()
-        )
-
-        # 11. Whether the next or previous day is a non-trading day
+        if self.data["Volume"].cumsum()[-1] != 0:
+            self.data["VWAP"] = (
+                self.data["Volume"]
+                * (self.data["High"] + self.data["Low"] + self.data["Close"])
+                / 3
+            ).cumsum() / self.data["Volume"].cumsum()
+         # 11. Whether the next or previous day is a non-trading day
         # nyse = mcal.get_calendar("NYSE")
         # schedule = nyse.schedule(start_date=self.start_date, end_date=self.end_date)
         # economic_data["is_next_non_trading_day"] = economic_data.index.shift(
@@ -1294,15 +1688,6 @@ class StockPredictor:
         # ).astype(
         #     int
         # )
-
-        # Merge with stock data
-        if tnx_len < len(self.data):
-            economic_data = economic_data.drop(columns='TNX')
-        if self.interval == "1m":
-            self.data = pd.merge(self.data, economic_data, on="Datetime", how="left")
-        else:
-            self.data = pd.merge(self.data, economic_data, on="Date", how="left")
-
         ### 12. Volatility and Momentum
         # self.data["Daily Returns"] = self.data["Close"].pct_change() # Percentage change
         self.data["Daily Returns"] = (
@@ -1361,16 +1746,432 @@ class StockPredictor:
         # )
         # self.data["Market_Sentiment"] = sentimement
 
-        # Final cleaning
-        # convert timezone to AMErican/New_York
-        if self.interval == "1m":
-            self.data.index = self.data.index.tz_convert("America/New_York")
-        self.data = self.data.dropna()
-        if len(self.data) < 50:
-            print("Not enough data to train the model.")
-            raise ValueError("Not enough data to train the model.")
 
-        return self
+       
+    def _add_economic_indicators(self):
+        """Add economic indicators for stock trading"""
+        # Batch download all economic indicators at once
+        economic_tickers = ["^GSPC", "^TNX", "IEF", "USDCAD=X", "XLK", "XLF", "XLE", "^VIX"]
+        try:
+            print("Trying to fetch economic data from cache...")
+            economic_data = get_cached_data(
+                economic_tickers,
+                start_date=self.start_date,
+                end_date=self.end_date,
+                interval=self.interval,
+                cache_dir="data_cache"
+            )
+        except Exception as e:
+            print(f"Cache fetch failed: {str(e)}. Downloading fresh data...")
+            economic_data = yf.download(
+                economic_tickers,
+                start=self.start_date, 
+                end=self.end_date,
+                interval=self.interval,
+                group_by='ticker',  # Group results by ticker
+                auto_adjust=True,   # Auto-adjust data
+                progress=False,      # Disable progress bar
+                prepost=True  # Include pre/post market data
+            )
+
+        # Extract each indicator from the batched data
+        try:
+            sp500 = economic_data['^GSPC']['Close'] - economic_data['^GSPC']['Close'].mean()
+            tnx = economic_data['^TNX']['Close']
+            tnx_len = len(tnx)
+            treasury_yield = economic_data['IEF']['Close'] 
+            exchange_rate = economic_data['USDCAD=X']['Close']
+            technology_sector = economic_data['XLK']['Close']
+            financials_sector = economic_data['XLF']['Close']
+            energy_sector = economic_data['XLE']['Close']
+            vix = economic_data['^VIX']['Close']
+            
+            # Additional defensive code to handle missing data
+            for series_name, series in [
+                ("TNX", tnx), 
+                ("Treasury_Yield", treasury_yield),
+                ("Exchange Rate", exchange_rate),
+                ("Technology Sector", technology_sector),
+                ("Financial Sector", financials_sector),
+                ("Energy Sector", energy_sector),
+                ("VIX", vix)
+            ]:
+                if series.empty:
+                    print(f"Warning: {series_name} data is empty, filling with zeros")
+                    if series_name == "TNX":
+                        tnx = pd.Series(0, index=self.data.index)
+                        tnx_len = 0
+        except KeyError as e:
+            print(f"Warning: One or more economic indicators missing: {e}")
+            # Provide fallback values or skip the missing indicators
+
+
+        economic_data = (
+            pd.concat(
+                [
+                    sp500,
+                    tnx,
+                    treasury_yield,
+                    exchange_rate,
+                    technology_sector,
+                    financials_sector,
+                    vix,
+                    energy_sector,
+                ],
+                axis=1,
+                keys=[
+                    "SP500",
+                    "TNX",
+                    "Treasury_Yield",
+                    "USDCAD=X",
+                    "Tech",
+                    "Fin",
+                    "VIX",
+                    "Energy",
+                ],
+            )
+            .reset_index()
+            .rename(columns={"index": "Date"})
+            # .dropna()
+        )
+        economic_data.columns = economic_data.columns.get_level_values(0)
+        if self.interval == "1m" or self.interval == "5m":
+        # or self.interval == "15m" or self.interval == "30m" or self.interval == "60m" or self.interval == "90m":
+
+            economic_data["Datetime"] = pd.to_datetime(economic_data["Datetime"])
+            economic_data.set_index("Datetime", inplace=True)
+        else:
+            economic_data["Date"] = pd.to_datetime(economic_data["Date"])
+            economic_data.set_index("Date", inplace=True)
+        
+        # Issue of Yfinance API of USDCAD=X
+        # Fill missing values with the mean
+        economic_data["USDCAD=X"] = economic_data["USDCAD=X"].fillna(
+            economic_data["USDCAD=X"].mean()
+        )
+        # Merge with stock data
+        if tnx_len < len(self.data):
+            economic_data = economic_data.drop(columns='TNX')
+        if self.interval in ["1m", "5m"]:
+            self.data = pd.merge(self.data, economic_data, on="Datetime", how="left")
+        else:
+            self.data = pd.merge(self.data, economic_data, on="Date", how="left")
+
+    
+    def _add_crypto_liquidity_indicators(self):
+        """Add crypto-specific liquidity indicators"""
+        
+        # Volume-based liquidity metrics
+        self.data['Volume_MA'] = self.data['Volume'].rolling(24).mean()
+        self.data['Relative_Volume'] = self.data['Volume'] / self.data['Volume_MA']
+        
+        # Liquidity ratio (higher values indicate better liquidity)
+        self.data['Liquidity_Ratio'] = self.data['Volume'] / (self.data['High'] - self.data['Low']).replace(0, 0.001)
+        
+        # Volume-weighted volatility (measures how efficiently price moves with volume)
+        self.data['Vol_Weighted_Volatility'] = (self.data['Close'].pct_change().abs() * 
+                                            self.data['Volume'] / self.data['Volume_MA'])
+        
+        # VWAP and deviation from VWAP (measure of buying/selling pressure)
+        self.data['VWAP'] = (self.data['Volume'] * self.data['Close']).rolling(24).sum() / self.data['Volume'].rolling(24).sum()
+        self.data['VWAP_Deviation'] = ((self.data['Close'] - self.data['VWAP']) / self.data['VWAP']) * 100
+        
+        # Flash crash detector (sudden volume spike with price drop)
+        vol_spike = self.data['Volume'] > (self.data['Volume'].rolling(12).mean() * 3)
+        price_drop = self.data['Close'].pct_change() < -0.03
+        self.data['Flash_Crash_Signal'] = vol_spike & price_drop
+            
+    
+    def _add_crypto_volatility_indicators(self):
+        """Add specialized crypto volatility indicators"""
+        
+        # True Range and ATR variations
+        self.data['TR'] = np.maximum(
+            self.data['High'] - self.data['Low'],
+            np.maximum(
+                abs(self.data['High'] - self.data['Close'].shift(1)),
+                abs(self.data['Low'] - self.data['Close'].shift(1))
+            )
+        )
+        self.data['ATR_1h'] = self.data['TR'].rolling(60).mean()  # 1-hour ATR (for minute data)
+        self.data['ATR_24h'] = self.data['TR'].rolling(1440).mean()  # 24-hour ATR
+        
+        # Volatility ratio (short-term vs long-term)
+        self.data['Volatility_Ratio'] = self.data['ATR_1h'] / self.data['ATR_24h']
+        
+        # Bollinger Band Width (normalized)
+        bb_period = 20
+        std_dev = 2
+        self.data['BB_Middle'] = self.data['Close'].rolling(bb_period).mean()
+        self.data['BB_Width'] = ((self.data['Close'].rolling(bb_period).std() * std_dev * 2) / 
+                            self.data['BB_Middle']) * 100
+        
+        # Historical Volatility (annualized)
+        self.data['HV_1h'] = self.data['Close'].pct_change().rolling(60).std() * np.sqrt(525600)  # Minutes in a year
+        self.data['HV_24h'] = self.data['Close'].pct_change().rolling(1440).std() * np.sqrt(525600)
+        
+        # Volatility Regime (1=low, 2=medium, 3=high)
+        self.data['Volatility_Regime'] = 1  # Default to low
+        vol_75th = self.data['HV_24h'].quantile(0.75)
+        vol_25th = self.data['HV_24h'].quantile(0.25)
+        self.data.loc[self.data['HV_24h'] > vol_25th, 'Volatility_Regime'] = 2  # Medium
+        self.data.loc[self.data['HV_24h'] > vol_75th, 'Volatility_Regime'] = 3  # High
+        
+        # Guppy Multiple Moving Average (GMMA) Compression/Expansion
+        # A measure of trend strength and potential volatility expansion
+        ema_short = [3, 5, 8, 10, 12, 15]
+        ema_long = [30, 35, 40, 45, 50, 60]
+        
+        for period in ema_short + ema_long:
+            self.data[f'EMA_{period}'] = self.data['Close'].ewm(span=period, adjust=False).mean()
+        
+        # Calculate average distance between short EMAs
+        short_emas = [self.data[f'EMA_{p}'] for p in ema_short]
+        long_emas = [self.data[f'EMA_{p}'] for p in ema_long]
+        
+        self.data['GMMA_Short_Spread'] = (max([short_emas[i].iloc[-1] for i in range(len(short_emas))]) - 
+                                        min([short_emas[i].iloc[-1] for i in range(len(short_emas))])) / self.data['Close']
+        self.data['GMMA_Long_Spread'] = (max([long_emas[i].iloc[-1] for i in range(len(long_emas))]) - 
+                                    min([long_emas[i].iloc[-1] for i in range(len(long_emas))])) / self.data['Close']
+
+
+    def _add_crypto_market_structure_indicators(self):
+        """Add market structure indicators specifically for crypto"""
+        
+        # Detect pivot points (swing highs and lows)
+        pivot_length = 5
+        self.data['Pivot_High'] = 0
+        self.data['Pivot_Low'] = 0
+        
+        for i in range(pivot_length, len(self.data) - pivot_length):
+            # Check for pivot high
+            if (self.data['High'].iloc[i] > self.data['High'].iloc[i-pivot_length:i].max() and 
+                self.data['High'].iloc[i] > self.data['High'].iloc[i+1:i+pivot_length+1].max()):
+                self.data.loc[self.data.index[i], 'Pivot_High'] = 1
+                
+            # Check for pivot low
+            if (self.data['Low'].iloc[i] < self.data['Low'].iloc[i-pivot_length:i].min() and 
+                self.data['Low'].iloc[i] < self.data['Low'].iloc[i+1:i+pivot_length+1].min()):
+                self.data.loc[self.data.index[i], 'Pivot_Low'] = 1
+        
+        # Market Structure Shift Detection
+        self.data['Structure_Bullish'] = 0
+        self.data['Structure_Bearish'] = 0
+        
+        pivot_highs = self.data[self.data['Pivot_High'] == 1]
+        pivot_lows = self.data[self.data['Pivot_Low'] == 1]
+        
+        if len(pivot_highs) >= 2 and len(pivot_lows) >= 2:
+            # Check for Higher Highs & Higher Lows (Bullish Structure)
+            last_two_highs = pivot_highs.iloc[-2:]['High'].values
+            last_two_lows = pivot_lows.iloc[-2:]['Low'].values
+            
+            if len(last_two_highs) == 2 and len(last_two_lows) == 2:
+                if last_two_highs[1] > last_two_highs[0] and last_two_lows[1] > last_two_lows[0]:
+                    self.data.loc[self.data.index[-1], 'Structure_Bullish'] = 1
+                    
+                # Check for Lower Highs & Lower Lows (Bearish Structure)
+                if last_two_highs[1] < last_two_highs[0] and last_two_lows[1] < last_two_lows[0]:
+                    self.data.loc[self.data.index[-1], 'Structure_Bearish'] = 1
+        
+        # Ichimoku Cloud for trend structure and support/resistance
+        high_9 = self.data['High'].rolling(window=9).max()
+        low_9 = self.data['Low'].rolling(window=9).min()
+        self.data['Tenkan_Sen'] = (high_9 + low_9) / 2  # Conversion Line
+        
+        high_26 = self.data['High'].rolling(window=26).max()
+        low_26 = self.data['Low'].rolling(window=26).min()
+        self.data['Kijun_Sen'] = (high_26 + low_26) / 2  # Base Line
+        
+        self.data['Senkou_Span_A'] = ((self.data['Tenkan_Sen'] + self.data['Kijun_Sen']) / 2).shift(26)  # Leading Span A
+        self.data['Senkou_Span_B'] = ((self.data['High'].rolling(window=52).max() + 
+                                    self.data['Low'].rolling(window=52).min()) / 2).shift(26)  # Leading Span B
+        
+        # Cloud state (Above/Below/In cloud)
+        self.data['Cloud_State'] = 0  # 0 = in cloud, 1 = above cloud (bullish), -1 = below cloud (bearish)
+        
+        for i in range(len(self.data)):
+            if i > 26:  # Ensure we have cloud data
+                if self.data['Close'].iloc[i] > max(self.data['Senkou_Span_A'].iloc[i], self.data['Senkou_Span_B'].iloc[i]):
+                    self.data.loc[self.data.index[i], 'Cloud_State'] = 1
+                elif self.data['Close'].iloc[i] < min(self.data['Senkou_Span_A'].iloc[i], self.data['Senkou_Span_B'].iloc[i]):
+                    self.data.loc[self.data.index[i], 'Cloud_State'] = -1
+
+
+    def _add_crypto_onchain_indicators(self):
+        """Add crypto-specific indicators that mimic on-chain and exchange data"""
+        
+        # Simulate exchange inflow/outflow with price and volume
+        self.data['Exchange_Flow'] = 0
+        price_change = self.data['Close'].pct_change()
+        volume_change = self.data['Volume'].pct_change()
+        
+        # When price drops but volume increases = potential exchange inflow (selling pressure)
+        self.data.loc[(price_change < -0.01) & (volume_change > 0.2), 'Exchange_Flow'] = -1
+        
+        # When price increases with volume = potential exchange outflow (buying pressure)
+        self.data.loc[(price_change > 0.01) & (volume_change > 0.2), 'Exchange_Flow'] = 1
+        
+        # Average True Range Volatility Bands (wider during high volatility)
+        self.data['ATR_5'] = self.data['TR'].rolling(5).mean()
+        self.data['Upper_Band'] = self.data['Close'] + (self.data['ATR_5'] * 2)
+        self.data['Lower_Band'] = self.data['Close'] - (self.data['ATR_5'] * 2)
+        
+        # Whale activity detection (large volume spikes)
+        median_vol = self.data['Volume'].rolling(50).median()
+        self.data['Whale_Activity'] = (self.data['Volume'] > median_vol * 3).astype(int)
+        
+        # Create Buy/Sell imbalance ratio
+        close_change = self.data['Close'].diff()
+        self.data['Buy_Volume'] = self.data['Volume'] 
+        self.data['Sell_Volume'] = self.data['Volume']
+        
+        self.data.loc[close_change > 0, 'Sell_Volume'] = self.data.loc[close_change > 0, 'Volume'] * 0.4
+        self.data.loc[close_change < 0, 'Buy_Volume'] = self.data.loc[close_change < 0, 'Volume'] * 0.4
+        
+        # Replace the problematic line with this more robust implementation
+        buy_vol_sum = self.data['Buy_Volume'].rolling(24).sum()
+        sell_vol_sum = self.data['Sell_Volume'].rolling(24).sum()
+        # Handle potential zeros in denominator and handle NaNs
+        self.data['Buy_Sell_Ratio'] = buy_vol_sum / sell_vol_sum.replace(0, 0.001)
+        # Fill NaN values with a neutral ratio of 1.0
+        self.data['Buy_Sell_Ratio'] = self.data['Buy_Sell_Ratio'].fillna(1.0)
+
+
+
+    def _load_crypto_data_from_alpaca(self):
+        """Get crypto data from Alpaca API when yfinance fails"""
+        try:
+            from alpaca.data import CryptoHistoricalDataClient
+            from alpaca.data.requests import CryptoBarsRequest
+            from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+            
+            # Initialize crypto data client
+            crypto_client = CryptoHistoricalDataClient()
+            
+            # Convert interval to Alpaca timeframe
+            timeframe_map = {
+                "1m": TimeFrame.Minute,
+                "5m": TimeFrame(5, TimeFrameUnit.Minute),
+                # "15m": TimeFrame.Minute(15),
+                # "30m": TimeFrame.Minute(30),
+                # "60m": TimeFrame.Hour,
+                # "90m": TimeFrame.Hour,  # Alpaca doesn't have 90m, use Hour
+                "1h": TimeFrame.Hour,
+                "1d": TimeFrame.Day
+            }
+            
+            timeframe = timeframe_map.get(self.interval, TimeFrame.Day)
+            
+            # Prepare symbol for Alpaca (ensure it has the right format)
+            alpaca_symbol = self.symbol
+            if '-' in alpaca_symbol and '/' not in alpaca_symbol:
+                alpaca_symbol = alpaca_symbol.replace('-', '/')
+            
+            # Create request for crypto bars
+            request_params = CryptoBarsRequest(
+                symbol_or_symbols=alpaca_symbol,
+                timeframe=timeframe,
+                start=pd.Timestamp(self.start_date).tz_localize("America/New_York"),
+                end=pd.Timestamp(self.end_date).tz_localize("America/New_York")
+            )
+            
+            # Get the bars
+            bars = crypto_client.get_crypto_bars(request_params)
+            
+            # Convert to DataFrame
+            df = bars.df
+            
+            # Reset multi-level index and format similar to yfinance output
+            if isinstance(df.index, pd.MultiIndex):
+                df = df.reset_index(level=0, drop=True)
+            
+            # Rename columns to match yfinance format
+            df = df.rename(columns={
+                'open': 'Open',
+                'high': 'High',
+                'low': 'Low',
+                'close': 'Close', 
+                'volume': 'Volume',
+                # 'trade_count': 'Trade_Count',
+                # 'vwap': 'VWAP'
+            })
+            
+            self.data = df
+            # logger.info(f"Successfully loaded crypto data from Alpaca for {alpaca_symbol}")
+            return df
+            
+        except Exception as e:
+            print(f"Failed to get crypto data from Alpaca for {self.symbol}: {str(e)}")
+            self.data = pd.DataFrame()  # Empty DataFrame
+            return self.data
+
+    def _load_stock_data_from_alpaca(self):
+        """Get stock data from Alpaca API when yfinance fails"""
+        try:
+            from alpaca.data import StockHistoricalDataClient
+            from alpaca.data.requests import StockBarsRequest
+            from alpaca.data.timeframe import TimeFrame, TimeFrameUnit
+            
+            # Init stock data client (assuming API keys are available)
+            api_key = "PKXPBKCIK15IBA4G84P4"
+            secret_key = "aJHuDphvn8S6M69F0Vrc0EAudEgob2xc5ltXc0bA"
+            stock_client = StockHistoricalDataClient(api_key, secret_key)
+            
+            # Convert interval to Alpaca timeframe
+            timeframe_map = {
+                "1m": TimeFrame.Minute,
+                "5m": TimeFrame(5, TimeFrameUnit.Minute),
+                # "15m": TimeFrame.Minute(15),
+                # "30m": TimeFrame.Minute(30),
+                # "60m": TimeFrame.Hour,
+                # "90m": TimeFrame.Hour,  # Alpaca doesn't have 90m, use Hour
+                "1h": TimeFrame.Hour,
+                "1d": TimeFrame.Day
+            }
+            
+            timeframe = timeframe_map.get(self.interval, TimeFrame.Day)
+            
+            # Create request for stock bars
+            request_params = StockBarsRequest(
+                symbol_or_symbols=self.symbol,
+                timeframe=timeframe,
+                start=pd.Timestamp(self.start_date).tz_localize("America/New_York"),
+                end=pd.Timestamp(self.end_date).tz_localize("America/New_York")
+            )
+            
+            # Get the bars
+            bars = stock_client.get_stock_bars(request_params)
+            
+            # Convert to DataFrame
+            df = bars.df
+            
+            # Reset multi-level index and format similar to yfinance output
+            if isinstance(df.index, pd.MultiIndex):
+                df = df.reset_index(level=0, drop=True)
+                
+            # Rename columns to match yfinance format
+            df = df.rename(columns={
+                'open': 'Open',
+                'high': 'High',
+                'low': 'Low',
+                'close': 'Close', 
+                'volume': 'Volume',
+                # 'trade_count': 'Trade_Count',
+                # 'vwap': 'VWAP'
+            })
+            
+            self.data = df
+            # print(f"Successfully loaded stock data from Alpaca for {self.symbol}")
+            return df
+            
+        except Exception as e:
+            print(f"Failed to get stock data from Alpaca for {self.symbol}: {str(e)}")
+            self.data = pd.DataFrame()  # Empty DataFrame
+            return self.data
+
+
+
 
     def prepare_models(
         self, predictors: list[str], horizon, weight: bool = False, refit: bool = True
@@ -2909,14 +3710,203 @@ class Backtester:
         risk_per_trade = self.portfolio['cash'] * self.predictor.risk_params['per_trade_risk']
         return risk_per_trade / current_price
          
+    # The version using ML model
+    # def run_backtest(self, start_date, end_date):
+    #     """More robust date handling"""
+    #     try:
+    #         import pandas_market_calendars as mcal
+    #         import pandas as pd
+    #         import numpy as np
+            
+    #         nyse = mcal.get_calendar("NYSE")
+    #         schedule = nyse.schedule(start_date=start_date, end_date=end_date)
+    #         if schedule.empty:
+    #             print(f"No trading days between {start_date} and {end_date}")
+    #             return pd.DataFrame(), {'error': 'No trading days'}
+                
+    #         dates = schedule.index.tz_localize(None)
+    #         print('First date:', dates[0])
+    #         print('Last date:', dates[-1])
+    #     except Exception as e:
+    #         print(f"Date error: {str(e)}")
+    #         return pd.DataFrame(), {'error': str(e)}
     
+    #     # if rebalance_frequency == 'weekly':
+    #     #     rebalance_dates = pd.date_range(start=start_date, end=end_date, freq='W-FRI')
+    #     # elif rebalance_frequency == 'monthly':
+    #     #     rebalance_dates = pd.date_range(start=start_date, end=end_date, freq='BM')
+    #     # elif rebalance_frequency == 'quarterly':
+    #     #     rebalance_dates = pd.date_range(start=start_date, end=end_date, freq='BQ')
+    #     # else:
+    #     #     raise ValueError("rebalance_frequency must be 'weekly', 'monthly', or 'quarterly'")
+        
+
+    #     # Store original full data
+    #     full_data = self.predictor.data.copy()# data till today and so no end date is needed for the stock predictor
+    #     self.full_data = full_data
+        
+    #     # Get signal from new model once three days
+    #     i = 0
+    #     first_date = dates[0]
+    #     for date in dates:
+    #         # Make sure date exists in our data
+    #         if date not in full_data.index:
+    #             print(f"Date {date} not in data. Skipping.")
+    #             continue
+
+    #         # is_rebalance_day = pd.to_datetime(date) in rebalance_dates
+
+    #         # if is_rebalance_day:
+    #         #     print(f"Running model on rebalance date: {date}")
+
+
+
+            
+    #         if i % 3 == 0 and i != 0: # regenerate signal every 10 days
+    #             first_date = date 
+
+
+
+                
+    #         # self.predictor.end_date = date - pd.Timedelta(days=1)
+    #         self.predictor.end_date = first_date
+    #         self.predictor.load_data()  # Fresh load with cutoff
+    #         # self.predictor.data = self.predictor.data.loc[:date]  
+    #         print(f'last data of predictor data: {self.predictor.data.index[-1]}')
+    #         i += 1
+        
+    #         # Filter data up to current date
+    #         # self.predictor.data = full_data.loc[:date].copy()
+            
+    #         # Generate signal using existing code
+    #         signal = self.predictor.generate_trading_signal(self.predictor.symbol, horizon = 5)
+            
+    #         # Execute trade
+    #         try:
+
+    #             current_price = full_data['Close'].loc[date]
+    #             position_size = self._calculate_position_size(current_price)
+    #         except (KeyError, IndexError) as e:
+    #             print(f"Data not available for {date}. Error: {e}. Skipping.")
+    #             continue
+            
+    #         # Apply slippage and commission
+    #         executed_price = current_price * (1 + self.slippage) if signal == 'BUY' \
+    #             else current_price * (1 - self.slippage)
+            
+    #         if signal == 'BUY' and self.portfolio['cash'] > executed_price * position_size:
+    #             self._execute_buy(executed_price, position_size, date)
+    #         elif signal == 'SELL' and self.predictor.symbol in self.portfolio['positions']:
+    #             self._execute_sell(executed_price, date)
+    #         else:
+    #             print(f"Signal is hold so no trade executed for {self.predictor.symbol} on {date} ")
+            
+    #         # Update portfolio value
+    #         self._update_portfolio_value(date)
+            
+    #         # Check risk limits
+    #         if self._check_daily_loss():
+    #             print(f"Daily loss limit hit on {date}. Stopping backtest.")
+    #             break
+        
+    #     # Restore original data
+    #     self.predictor.data = full_data
+        
+    #     return self._generate_report()
+        
+    # def run_backtest(self, start_date, end_date):
+    #     """Backtest using get_entry_signal instead of generate_trading_signal"""
+    #     try:
+    #         import pandas_market_calendars as mcal
+    #         import pandas as pd
+    #         import numpy as np
+            
+    #         nyse = mcal.get_calendar("NYSE")
+    #         schedule = nyse.schedule(start_date=start_date, end_date=end_date)
+    #         if schedule.empty:
+    #             print(f"No trading days between {start_date} and {end_date}")
+    #             return pd.DataFrame(), {'error': 'No trading days'}
+                
+    #         dates = schedule.index.tz_localize(None)
+    #         print('First date:', dates[0])
+    #         print('Last date:', dates[-1])
+    #     except Exception as e:
+    #         print(f"Date error: {str(e)}")
+    #         return pd.DataFrame(), {'error': str(e)}
+
+    #     # Store original full data
+    #     full_data = self.predictor.data.copy()
+    #     self.full_data = full_data
+        
+    #     # Get signal from new model once every three days
+    #     i = 0
+    #     first_date = dates[0]
+    #     for date in dates:
+    #         # Make sure date exists in our data
+    #         if date not in full_data.index:
+    #             print(f"Date {date} not in data. Skipping.")
+    #             continue
+                
+    #         if i % 2 == 0 and i != 0: # regenerate signal every 3 days
+    #             first_date = date 
+                
+    #         # Update predictor to use data up to current date
+    #         self.predictor.end_date = first_date
+    #         self.predictor.load_data()  
+    #         print(f'Last data of predictor data: {self.predictor.data.index[-1]}')
+    #         i += 1
+        
+    #         # Generate signal using get_entry_signal instead of generate_trading_signal
+    #         try:
+    #             decision, confidence, rationale, levels = self.predictor.get_entry_signal(self.predictor.symbol)
+    #             signal = decision  # BUY, SELL, or HOLD
+                
+    #             print(f"Date: {date}, Signal: {signal}, Confidence: {confidence}%")
+    #             print(f"Rationale: {rationale}")
+    #         except Exception as e:
+    #             print(f"Error generating signal for {date}: {str(e)}")
+    #             continue
+            
+    #         # Execute trade
+    #         try:
+    #             current_price = full_data['Close'].loc[date]
+    #             position_size = self._calculate_position_size(current_price)
+    #         except (KeyError, IndexError) as e:
+    #             print(f"Data not available for {date}. Error: {e}. Skipping.")
+    #             continue
+            
+    #         # Apply slippage and commission
+    #         executed_price = current_price * (1 + self.slippage) if signal == 'BUY' \
+    #             else current_price * (1 - self.slippage)
+            
+    #         if signal == 'BUY' and self.portfolio['cash'] > executed_price * position_size:
+    #             self._execute_buy(executed_price, position_size, date)
+    #         elif signal == 'SELL' and self.predictor.symbol in self.portfolio['positions']:
+    #             self._execute_sell(executed_price, date)
+    #         else:
+    #             print(f"Signal is {signal} so no trade executed for {self.predictor.symbol} on {date}")
+            
+    #         # Update portfolio value
+    #         self._update_portfolio_value(date)
+            
+    #         # Check risk limits
+    #         if self._check_daily_loss():
+    #             print(f"Daily loss limit hit on {date}. Stopping backtest.")
+    #             break
+        
+    #     # Restore original data
+    #     self.predictor.data = full_data
+        
+    #     return self._generate_report() 
+
     def run_backtest(self, start_date, end_date):
-        """More robust date handling"""
+        """Backtest using get_entry_signal instead of generate_trading_signal"""
         try:
             import pandas_market_calendars as mcal
             import pandas as pd
             import numpy as np
             
+            # Get trading days for the specified period
             nyse = mcal.get_calendar("NYSE")
             schedule = nyse.schedule(start_date=start_date, end_date=end_date)
             if schedule.empty:
@@ -2929,61 +3919,56 @@ class Backtester:
         except Exception as e:
             print(f"Date error: {str(e)}")
             return pd.DataFrame(), {'error': str(e)}
-    
-        # if rebalance_frequency == 'weekly':
-        #     rebalance_dates = pd.date_range(start=start_date, end=end_date, freq='W-FRI')
-        # elif rebalance_frequency == 'monthly':
-        #     rebalance_dates = pd.date_range(start=start_date, end=end_date, freq='BM')
-        # elif rebalance_frequency == 'quarterly':
-        #     rebalance_dates = pd.date_range(start=start_date, end=end_date, freq='BQ')
-        # else:
-        #     raise ValueError("rebalance_frequency must be 'weekly', 'monthly', or 'quarterly'")
-        
 
         # Store original full data
-        full_data = self.predictor.data.copy()# data till today and so no end date is needed for the stock predictor
+        full_data = self.predictor.data.copy()
         self.full_data = full_data
         
-        # Get signal from new model once three days
+        # Reset portfolio for backtest
+        self.portfolio = {
+            'cash': self.initial_capital,
+            'positions': {},
+            'value_history': [],
+            'transactions': []
+        }
+        
+        # Regenerate signals periodically (every 2 days)
         i = 0
         first_date = dates[0]
         for date in dates:
-            # Make sure date exists in our data
+            # Skip dates that don't exist in our data
             if date not in full_data.index:
                 print(f"Date {date} not in data. Skipping.")
                 continue
-
-            # is_rebalance_day = pd.to_datetime(date) in rebalance_dates
-
-            # if is_rebalance_day:
-            #     print(f"Running model on rebalance date: {date}")
-
-
-
-            
-            if i % 3 == 0 and i != 0: # regenerate signal every 10 days
-                first_date = date 
-
-
-
                 
-            # self.predictor.end_date = date - pd.Timedelta(days=1)
+            # Re-train model every N days to avoid look-ahead bias
+            if i % 2 == 0 and i != 0:  # Regenerate signal every 2 days
+                first_date = date
+                
+            # Update predictor to use ONLY data up to current date
+            # This is critical to prevent look-ahead bias
             self.predictor.end_date = first_date
-            self.predictor.load_data()  # Fresh load with cutoff
-            # self.predictor.data = self.predictor.data.loc[:date]  
-            print(f'last data of predictor data: {self.predictor.data.index[-1]}')
+            self.predictor.load_data()  # Fresh load with cutoff at first_date
+            
+            print(f'Training data ends at: {self.predictor.data.index[-1]}')
             i += 1
         
-            # Filter data up to current date
-            # self.predictor.data = full_data.loc[:date].copy()
-            
-            # Generate signal using existing code
-            signal = self.predictor.generate_trading_signal(self.predictor.symbol, horizon = 5)
-            
-            # Execute trade
+            # Generate signal using get_entry_signal
             try:
-
-                current_price = full_data['Close'].loc[date]
+                # Use ONLY data available at this point to generate signal
+                decision, confidence, rationale, levels = self.predictor.get_entry_signal(self.predictor.symbol)
+                signal = decision  # BUY, SELL, or HOLD
+                
+                print(f"Date: {date}, Signal: {signal}, Confidence: {confidence}%")
+                print(f"Rationale: {rationale}")
+            except Exception as e:
+                print(f"Error generating signal for {date}: {str(e)}")
+                continue
+            
+            # Execute trade based on today's open price (not close - avoid look-ahead bias)
+            try:
+                # Use opening price for execution to avoid look-ahead bias
+                current_price = full_data.loc[date, 'Open'] if 'Open' in full_data.columns else full_data.loc[date, 'Close']
                 position_size = self._calculate_position_size(current_price)
             except (KeyError, IndexError) as e:
                 print(f"Data not available for {date}. Error: {e}. Skipping.")
@@ -2993,14 +3978,25 @@ class Backtester:
             executed_price = current_price * (1 + self.slippage) if signal == 'BUY' \
                 else current_price * (1 - self.slippage)
             
+            # Execute trades based on signal
             if signal == 'BUY' and self.portfolio['cash'] > executed_price * position_size:
                 self._execute_buy(executed_price, position_size, date)
-            elif signal == 'SELL' and self.predictor.symbol in self.portfolio['positions']:
-                self._execute_sell(executed_price, date)
-            else:
-                print(f"Signal is hold so no trade executed for {self.predictor.symbol} on {date} ")
+            elif signal == 'SELL':
+                if self.predictor.symbol in self.portfolio['positions']:
+                    self._execute_sell(executed_price, date)
+                else:
+                    # Optional: naked shorting if you want to match the Aptos implementation
+                    position_size = self._calculate_position_size(executed_price)
+                    self.portfolio['cash'] += executed_price * position_size - self.commission * position_size
+                    self.portfolio['transactions'].append(('SELL', executed_price, position_size, date))
+                    self.portfolio['positions'][self.predictor.symbol] = {
+                        'qty': -position_size, 
+                        'Avg_entry_price': executed_price,
+                    }
+                    print(f"SELL (short) executed on {date}: {position_size} shares at ${executed_price:.2f}")
             
-            # Update portfolio value
+            # Update portfolio value using closing price
+            closing_price = full_data.loc[date, 'Close']
             self._update_portfolio_value(date)
             
             # Check risk limits
@@ -3012,7 +4008,8 @@ class Backtester:
         self.predictor.data = full_data
         
         return self._generate_report()
-        
+
+
 # ------------------------------------------------------------------------------------------------------------
 
     def _execute_buy(self, price, qty, date):

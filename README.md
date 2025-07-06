@@ -81,8 +81,7 @@ The package features a custom `GradientDescentRegressor` that outperforms scikit
 <img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Train_1.png" width=50% height=60%><img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Train_2.png" width=50% height=60%><figcaption><strong>Training Convergence:</strong> Faster and more stable optimization compared to sklearn's SGDRegressor</figcaption> -->
 
 
-<img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Train_vs_Test.png" width=49% height=100%>
-<img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Losses_by_Category.png" width=49% height=100%>
+<img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Train_vs_Test.png" width=50% height=100%><img src="stock_prediction/docs/SGD_Comparison/SGD_Comparison_Losses_by_Category.png" width=50% height=100%>
 <figcaption>
 <strong>SGD Comparison:</strong> Epoch-wise MSE for training and test sets, and breakdown by loss category. Our custom implementation consistently achieves lower MSE and improved stability compared to sklearn's SGDRegressor.
 </figcaption>

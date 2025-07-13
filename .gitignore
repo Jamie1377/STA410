@@ -9,8 +9,6 @@ docs/model_cache/
 *.joblib
 *.hash
 
-
-
 stock_prediction/docs/model_cache/
 *.pkl
 *.joblib
@@ -20,3 +18,39 @@ stock_prediction/docs/model_cache/
 *.h5
 *.pth
 *.bin
+
+stock_prediction/aptos
+
+# API Keys and sensitive data
+API_KEYs.json
+.env
+
+# Model cache
+model_cache/
+*.pkl
+*.joblib
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.pytest_cache/
+
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db

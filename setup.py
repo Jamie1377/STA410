@@ -5,10 +5,10 @@ setup(
     version="0.1.5",
     packages=find_packages(),
     install_requires=[
-        "numpy",
+        "numpy==1.26.4",
         "pandas",
         "yfinance",
-        "scikit-learn",
+        "scikit-learn==1.6.1",
         "statsmodels",
         "xgboost",
         "lightgbm",

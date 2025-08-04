@@ -175,7 +175,7 @@ class GradientDescentRegressor(BaseEstimator, RegressorMixin):
         self.sq_grad_avg = np.zeros(n_features)
         
         tol = 0
-        for _ in range(self.n_iter):
+        for _ in range(self.n_iter):    #loss =  1/ n_samples * (X_b.T*self.coef_ -y)**2 (MSE)
             # Compute gradients from the loss function (2 is from the square)
             self.gradients_gd = 2 / n_samples * X_b.T @ (X_b @ self.coef_ - y)
             self.gradients_gd += self.alpha * self.coef_  # L2 regularization
@@ -758,8 +758,8 @@ class ARIMAXGBoost(BaseEstimator, RegressorMixin):
         # Modify predictions based on momentum regime
         predictions = (
             0.20 * arima_pred * (1 + 0.02 * momentum_regime)
-            + 0.10 * (hwes_forecast * 0.6 + ses2_forecast * 0.4)
-            + 0.70 * (gd_pred * 0.8 + sgd_pred * 0.2) * (1 + 0.02 * momentum_regime)
+            + 0.30 * (hwes_forecast * 0.6 + ses2_forecast * 0.4)
+            + 0.50 * (gd_pred * 0.8 + sgd_pred * 0.2) * (1 + 0.02 * momentum_regime)
             + 0.02 * lgbm_pred
             + 0.02 * catboost_pred
         )

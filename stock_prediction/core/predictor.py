@@ -42,8 +42,6 @@ import hashlib
 import joblib
 
 # API imports
-api_key = "PKXPBKCIK15IBA4G84P4"
-secret_key = "aJHuDphvn8S6M69F0Vrc0EAudEgob2xc5ltXc0bA"
 paper = True
 # DO not change this
 trade_api_url = None
@@ -1748,13 +1746,57 @@ class StockPredictor:
 
 
        
+    def get_cached_data(self, tickers, start_date, end_date, interval, cache_dir="data_cache"):
+        """Cache economic data to avoid repeated downloads"""
+        import hashlib
+        import os
+        
+        # Create cache directory if it doesn't exist
+        os.makedirs(cache_dir, exist_ok=True)
+        
+        # Create a unique cache key based on parameters
+        cache_key = f"{','.join(sorted(tickers))}_{start_date}_{end_date}_{interval}"
+        cache_hash = hashlib.md5(cache_key.encode()).hexdigest()
+        cache_file = os.path.join(cache_dir, f"{cache_hash}.pkl")
+        
+        # Check if cached data exists
+        if os.path.exists(cache_file):
+            try:
+                cached_data = joblib.load(cache_file)
+                print(f"Loaded cached economic data for {len(tickers)} tickers")
+                return cached_data
+            except Exception as e:
+                print(f"Failed to load cached data: {e}")
+        
+        # Download fresh data
+        print(f"Downloading fresh economic data for {len(tickers)} tickers")
+        data = yf.download(
+            tickers,
+            start=start_date,
+            end=end_date,
+            interval=interval,
+            group_by='ticker',
+            auto_adjust=True,
+            progress=False,
+            prepost=True
+        )
+        
+        # Cache the data
+        try:
+            joblib.dump(data, cache_file)
+            print(f"Cached economic data to {cache_file}")
+        except Exception as e:
+            print(f"Failed to cache data: {e}")
+        
+        return data
+
     def _add_economic_indicators(self):
         """Add economic indicators for stock trading"""
         # Batch download all economic indicators at once
         economic_tickers = ["^GSPC", "^TNX", "IEF", "USDCAD=X", "XLK", "XLF", "XLE", "^VIX"]
         try:
             print("Trying to fetch economic data from cache...")
-            economic_data = get_cached_data(
+            economic_data = self.get_cached_data(
                 economic_tickers,
                 start_date=self.start_date,
                 end_date=self.end_date,
@@ -2217,7 +2259,7 @@ class StockPredictor:
 
                 # Split data
                 X_train, X_test, y_train, y_test = train_test_split(
-                    X, y, test_size=0.2, random_state=42
+                    X, y, test_size=0.2, random_state=42, shuffle=False
                 )
 
                 # Scale features
@@ -4258,4 +4300,6 @@ class StressTester(Backtester):
 # Example usage
 if __name__ == "__main__":
     predictor = StockPredictor("AAPL", start_date="2020-01-01")
+    predictor.load_data()
+    print(predictor.data.head())
 

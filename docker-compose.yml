@@ -1,0 +1,78 @@
+version: '3.9'
+
+services:
+  sta410:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sta410_predictor
+    environment:
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - PAPER_TRADING=true
+      - CACHE_TTL_HOURS=24
+      # API credentials (use .env file in production)
+      - ALPACA_API_KEY=${ALPACA_API_KEY:-}
+      - ALPACA_SECRET_KEY=${ALPACA_SECRET_KEY:-}
+    volumes:
+      # Persistent volumes for cache and logs
+      - ./data_cache:/app/data_cache
+      - ./model_cache:/app/model_cache
+      - ./logs:/app/logs
+      # Mount .env for secrets (never commit)
+      - ./.env:/app/.env:ro
+    ports:
+      # Future: expose API endpoints here when REST API is added
+      - "8000:8000"
+    restart: unless-stopped
+    networks:
+      - sta410-network
+    # Resource limits for production
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+
+  # Optional: Redis for caching (add if scaling)
+  redis:
+    image: redis:7-alpine
+    container_name: sta410_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    networks:
+      - sta410-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Optional: Prometheus for metrics (add monitoring)
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: sta410_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    restart: unless-stopped
+    networks:
+      - sta410-network
+
+volumes:
+  redis_data:
+  prometheus_data:
+
+networks:
+  sta410-network:
+    driver: bridge

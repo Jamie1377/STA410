@@ -1,36 +1,36 @@
+# ==================== SECURITY: NEVER COMMIT SECRETS ====================
+API_KEYs.json
+aptos_wallet.json
+.env
+*.key
+*.pem
+secrets/
+.secrets/
+
+# ==================== CACHE & TEMPORARY FILES ====================
 # Model caches
-model_cache/
+model_cache/*
+!model_cache/.gitkeep
 *.pkl
 *.joblib
 *.hash
-
 docs/model_cache/
-*.pkl
-*.joblib
-*.hash
-
 stock_prediction/docs/model_cache/
-*.pkl
-*.joblib
-*.hash
+
+# Data cache
+data_cache/*
+!data_cache/.gitkeep
+transaction_logs/
 
 # Large data files
 *.h5
 *.pth
 *.bin
+*.csv
+*.feather
+*.parquet
 
-stock_prediction/aptos
-
-# API Keys and sensitive data
-API_KEYs.json
-.env
-
-# Model cache
-model_cache/
-*.pkl
-*.joblib
-
-# Python
+# Python cache
 __pycache__/
 *.pyc
 *.pyo
@@ -38,16 +38,42 @@ __pycache__/
 .Python
 *.so
 .pytest_cache/
+.egg-info/
+*.egg
 
 # Virtual environments
 venv/
 .venv/
 env/
 .env/
+ENV/
 
 # IDE
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
+
+# Logs
+logs/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test artifacts
+test_results/
+.coverage
+htmlcov/
+
+# Build
+build/
+dist/
+
+# Development
+stock_prediction/aptos
 *.swp
 *.swo
 

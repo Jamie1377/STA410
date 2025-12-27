@@ -18,7 +18,7 @@ statsforecast==2.0.2
 pygam==0.8.0
 schedule==1.2.0
 alpaca_trade_api==3.0.0
-alpaca==0.7.2
+alpaca==1.0.0
 pytickersymbols==1.13.0
 requests==2.31.0
 python-dotenv==1.0.0

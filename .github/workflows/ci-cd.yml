@@ -47,7 +47,7 @@ jobs:
         pytest tests/ -v --tb=short --cov=stock_prediction --cov-report=xml --cov-report=html || pytest tests/ -v --tb=short
     
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
         flags: unittests
@@ -56,7 +56,7 @@ jobs:
     
     - name: Archive test results
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: test-results-${{ matrix.python-version }}
         path: |
@@ -91,7 +91,7 @@ jobs:
     
     - name: Archive security reports
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: security-reports
         path: safety-report.json
@@ -123,7 +123,7 @@ jobs:
       continue-on-error: true
     
     - name: Archive build artifacts
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: build-artifacts
         path: dist/
@@ -151,7 +151,7 @@ jobs:
     
     - name: Archive documentation
       if: always()
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: documentation
         path: docs/_build/html/

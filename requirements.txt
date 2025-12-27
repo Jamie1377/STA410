@@ -11,7 +11,7 @@ matplotlib==3.8.2
 seaborn==0.13.0
 pandas_market_calendars==4.6.1
 mplcursors==0.5.2
-scikit-optimize==0.9.1
+scikit-optimize==0.10.2
 hmmlearn==0.3.3
 pmdarima==2.0.4
 statsforecast==2.0.2
